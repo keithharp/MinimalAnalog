@@ -1,0 +1,1015 @@
+/*
+ * Minimal Analog - A watchface for Pebble, Pebble Steel, Pebble Time, and Pebble Time Steel
+ * Version 2.0
+ *
+ * Sean Ullyatt - sullyatt@gmail.com
+ * Reliant Web Solutions, LLC (c) 2015 - All Right Reserved
+ *
+ * TODO:
+ *   - Add user option to show battery indicator at a certain charge percent, default 40% - DONE
+ *   - Add options for setting colors, foreground, background, weather, bluetooth, etc. - IN PROGRESS
+ *   - Add user option to select the style of hand - traditional or space - DONE
+ *   - Add user option for restricting weather updates to certain hours, default 7am to 11pm
+ *   - Add user option for user to select date format, default “%a %d"
+ *   - Add weather forecast in bluetooth area on double wrist-flick
+ */
+#include "watchface_window.h"
+#include "pebble_patch.h"
+#include <limits.h>
+
+typedef struct {
+  int message_type;
+
+  union {
+    // Weather message.
+    struct {
+      int message_id;
+      int condition_code;
+      int temperature;
+      bool is_daylight;
+    };
+
+    // Settings message.
+    struct {
+      bool show_seconds_hand;
+      int temperature_units;
+      bool vibrate_on_bluetooth_disconnect;
+      int show_battery_at_percent;
+      int hand_style;
+      int bg_color;
+      int fg1_color;
+      int fg2_color;
+      int fg3_color;
+      int temperature_font_size;
+    };
+  };
+} Message;
+
+// Keys used in all messages.
+#define KEY_MESSAGE_TYPE 0
+
+// Keys used in weather message.
+#define KEY_MESSAGE_ID 1
+#define KEY_CONDITION_CODE 2
+#define KEY_TEMPERATURE 3
+#define KEY_IS_DAYLIGHT 4
+
+// Keys used in settings message.
+#define MESSAGE_KEY_SHOW_SECONDS_HAND 5
+#define MESSAGE_KEY_TEMPERATURE_UNITS 6
+#define MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT 7
+#define MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT 8
+#define MESSAGE_KEY_HAND_STYLE 9
+#define MESSAGE_KEY_TEMPERATURE_SIZE 14
+
+// Keys used in color selection.
+#define MESSAGE_KEY_BG_COLOR 10
+#define MESSAGE_KEY_FG1_COLOR 11
+#define MESSAGE_KEY_FG2_COLOR 12
+#define MESSAGE_KEY_FG3_COLOR 13
+
+// Message types.
+#define MESSAGE_TYPE_READY 0
+#define MESSAGE_TYPE_WEATHER 1
+#define MESSAGE_TYPE_SETTINGS 2
+
+// Temperature units.
+#define TEMPERATURE_UNITS_CELSIUS 0
+#define TEMPERATURE_UNITS_FAHRENHEIT 1
+
+// Condition codes.
+// Reference: https://developer.yahoo.com/weather/documentation.html#codes
+#define CONDITION_CODE_REFRESH -1
+#define CONDITION_CODE_TORNADO 0
+#define CONDITION_CODE_TROPICAL_STORM 1
+#define CONDITION_CODE_HURRICANE 2
+#define CONDITION_CODE_SEVERE_THUNDERSTORMS 3
+#define CONDITION_CODE_THUNDERSTORMS 4
+#define CONDITION_CODE_MIXED_RAIN_AND_SNOW 5
+#define CONDITION_CODE_MIXED_RAIN_AND_SLEET 6
+#define CONDITION_CODE_MIXED_SNOW_AND_SLEET 7
+#define CONDITION_CODE_FREEZING_DRIZZLE 8
+#define CONDITION_CODE_DRIZZLE 9
+#define CONDITION_CODE_FREEZING_RAIN 10
+#define CONDITION_CODE_SHOWERS 11
+#define CONDITION_CODE_SHOWERS_ALIAS 12
+#define CONDITION_CODE_SNOW_FLURRIES 13
+#define CONDITION_CODE_LIGHT_SNOW_SHOWERS 14
+#define CONDITION_CODE_BLOWING_SNOW 15
+#define CONDITION_CODE_SNOW 16
+#define CONDITION_CODE_HAIL 17
+#define CONDITION_CODE_SLEET 18
+#define CONDITION_CODE_DUST 19
+#define CONDITION_CODE_FOGGY 20
+#define CONDITION_CODE_HAZE 21
+#define CONDITION_CODE_SMOKY 22
+#define CONDITION_CODE_BLUSTERY 23
+#define CONDITION_CODE_WINDY 24
+#define CONDITION_CODE_COLD 25
+#define CONDITION_CODE_CLOUDY 26
+#define CONDITION_CODE_MOSTLY_CLOUDY_NIGHT 27
+#define CONDITION_CODE_MOSTLY_CLOUDY_DAY 28
+#define CONDITION_CODE_PARTLY_CLOUDY_NIGHT 29
+#define CONDITION_CODE_PARTLY_CLOUDY_DAY 30
+#define CONDITION_CODE_CLEAR_NIGHT 31
+#define CONDITION_CODE_SUNNY 32
+#define CONDITION_CODE_FAIR_NIGHT 33
+#define CONDITION_CODE_FAIR_DAY 34
+#define CONDITION_CODE_MIXED_RAIN_AND_HAIL 35
+#define CONDITION_CODE_HOT 36
+#define CONDITION_CODE_ISOLATED_THUNDERSTORMS 37
+#define CONDITION_CODE_SCATTERED_THUNDERSTORMS 38
+#define CONDITION_CODE_SCATTERED_THUNDERSTORMS_ALIAS 39
+#define CONDITION_CODE_SCATTERED_SHOWERS 40
+#define CONDITION_CODE_HEAVY_SNOW 41
+#define CONDITION_CODE_SCATTERED_SNOW_SHOWERS 42
+#define CONDITION_CODE_HEAVY_SNOW_ALIAS 43
+#define CONDITION_CODE_PARTLY_CLOUDY 44
+#define CONDITION_CODE_THUNDERSHOWERS 45
+#define CONDITION_CODE_SNOW_SHOWERS 46
+#define CONDITION_CODE_ISOLATED_THUNDERSHOWERS 47
+
+int const MIN_WEATHER_UPDATE_INTERVAL_MS = 10 * 1000;
+int const MAX_WEATHER_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+
+typedef struct {
+  bool show_seconds_hand;
+  int temperature_units;
+  bool vibrate_on_bluetooth_disconnect;
+  int show_battery_at_percent;
+  int hand_style;
+  int temperature_font_size;
+
+  GFont font_hours;
+  GFont font_date;
+  GFont font_temperature;
+  GFont font_temperature_small;
+  // GFont font_temperature_medium;   The medium temperature font just reuses the font_date so no need to reload it.
+  GFont font_condition;
+  GFont font_battery;
+  GFont font_bluetooth;
+
+  GColor color_background;
+  GColor color_foreground_1; // ticks, numbers, date, weather, bluetooth
+  GColor color_foreground_2; // hour and minute hands
+  GColor color_foreground_3; // second hand
+  
+  // Hex values for the colors above.
+  int bg_color;
+  int fg1_color;
+  int fg2_color;
+  int fg3_color;
+
+  Layer *background_layer;
+
+  TextLayer *date_text_layer;
+  char date_text[sizeof("Jan 31")];
+
+  TextLayer *temperature_text_layer;
+  char temperature_text[sizeof("-999°")];
+
+  TextLayer *condition_text_layer;
+  char condition_text[sizeof("C")];
+
+  Layer *battery_layer;
+  TextLayer *battery_text_layer;
+  char battery_text[sizeof("C")];
+
+  TextLayer *bluetooth_text_layer;
+  char bluetooth_text[sizeof("b")];
+
+  GPath *hour_hand_path;
+  GPath *minute_hand_path;
+
+  Layer *hands_layer;
+  Layer *second_hand_layer;
+
+  AppTimer *weather_update_timer;
+  int weather_update_backoff_interval;
+  int expected_weather_message_id;
+} WatchfaceWindow;
+
+static Window *g_watchface_window = NULL;
+
+static void update_background(Layer *layer, GContext *ctx) {
+  WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
+  GRect bounds = layer_get_bounds(layer);
+  GPoint center = grect_center_point(&bounds);
+
+#ifdef PBL_COLOR
+  graphics_context_set_antialiased(ctx, true);
+  graphics_context_set_stroke_width(ctx, 3);
+#endif
+
+  graphics_context_set_fill_color(ctx, this->color_background);
+  graphics_context_set_stroke_color(ctx, this->color_foreground_1);
+  graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
+
+  int16_t ray_length = 111;
+  int ray_angles[8] = { 5, 10, 20, 25, 35, 40, 50, 55 };
+
+  for (int i = 0; i < 8; ++i) {
+    GPoint ray_endpoint = {
+      .x = (int16_t)(sin_lookup(TRIG_MAX_ANGLE * ray_angles[i] / 60) * (int32_t)ray_length / TRIG_MAX_RATIO) + center.x,
+      .y = (int16_t)(-cos_lookup(TRIG_MAX_ANGLE * ray_angles[i] / 60) * (int32_t)ray_length / TRIG_MAX_RATIO) + center.y,
+    };
+
+    graphics_draw_line(ctx, ray_endpoint, center);
+  }
+
+  // Draw background color rectangle to cover hour rays
+  graphics_context_set_fill_color(ctx, this->color_background);
+  graphics_context_set_stroke_color(ctx, this->color_background);
+  graphics_fill_rect(ctx, GRect(10, 10, bounds.size.w - 20, bounds.size.h - 20), 0, GCornerNone);
+
+  // Draw hours
+  graphics_context_set_text_color(ctx, this->color_foreground_1);
+  graphics_draw_text(ctx, "12", this->font_hours, GRect((bounds.size.w / 2) - 15, -5, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, "3", this->font_hours, GRect(bounds.size.w - 31, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
+  graphics_draw_text(ctx, "6", this->font_hours, GRect((bounds.size.w / 2) - 15, bounds.size.h - 26, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, "9", this->font_hours, GRect(1, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+}
+
+static void update_date(Window *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+
+  strftime(this->date_text, sizeof(this->date_text), "%a %d", t);
+  text_layer_set_text(this->date_text_layer, this->date_text);
+  text_layer_set_text_color(this->date_text_layer, this->color_foreground_1);
+}
+
+static void update_temperature(Window *watchface_window, int temperature) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  char const *format;
+  GRect temperature_text_layer_frame = layer_get_frame(text_layer_get_layer(this->temperature_text_layer));
+  if (temperature < 0) {
+    format = temperature >= -999 ? "%d°" : "";
+  } else {
+    format = temperature <= 999 ? "%d°" : "";
+  }
+
+  snprintf(this->temperature_text, sizeof(this->temperature_text), format, temperature);
+  text_layer_set_text(this->temperature_text_layer, this->temperature_text);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Updating Temp to : %s", this->temperature_text);
+  layer_set_frame(text_layer_get_layer(this->temperature_text_layer), temperature_text_layer_frame);
+  text_layer_set_text_color(this->temperature_text_layer, this->color_foreground_1);
+}
+
+static void condition_code_to_icon(Window *watchface_window, int condition_code, bool is_daylight) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  // Set symbol using icon font
+  switch (condition_code) {
+    case CONDITION_CODE_REFRESH:
+      strncpy(this->condition_text, "f", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_TORNADO:
+      strncpy(this->condition_text, "A", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_TROPICAL_STORM:
+    case CONDITION_CODE_HURRICANE:
+      strncpy(this->condition_text, "B", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_THUNDERSTORMS:
+    case CONDITION_CODE_SEVERE_THUNDERSTORMS:
+    case CONDITION_CODE_ISOLATED_THUNDERSTORMS:
+    case CONDITION_CODE_SCATTERED_THUNDERSTORMS:
+    case CONDITION_CODE_SCATTERED_THUNDERSTORMS_ALIAS:
+    case CONDITION_CODE_THUNDERSHOWERS:
+    case CONDITION_CODE_ISOLATED_THUNDERSHOWERS:
+      strncpy(this->condition_text, "C", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_FREEZING_RAIN:
+    case CONDITION_CODE_FREEZING_DRIZZLE:
+    case CONDITION_CODE_MIXED_RAIN_AND_SNOW:
+    case CONDITION_CODE_MIXED_RAIN_AND_SLEET:
+    case CONDITION_CODE_HAIL:
+    case CONDITION_CODE_SLEET:
+      strncpy(this->condition_text, "D", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_SHOWERS:
+    case CONDITION_CODE_SHOWERS_ALIAS:
+    case CONDITION_CODE_SCATTERED_SHOWERS:
+    case CONDITION_CODE_DRIZZLE:
+    case CONDITION_CODE_MIXED_RAIN_AND_HAIL:
+      strncpy(this->condition_text, "E", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_SNOW:
+    case CONDITION_CODE_SNOW_FLURRIES:
+    case CONDITION_CODE_MIXED_SNOW_AND_SLEET:
+    case CONDITION_CODE_LIGHT_SNOW_SHOWERS:
+    case CONDITION_CODE_BLOWING_SNOW:
+    case CONDITION_CODE_HEAVY_SNOW:
+    case CONDITION_CODE_SCATTERED_SNOW_SHOWERS:
+    case CONDITION_CODE_HEAVY_SNOW_ALIAS:
+    case CONDITION_CODE_SNOW_SHOWERS:
+      strncpy(this->condition_text, "F", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_DUST:
+    case CONDITION_CODE_FOGGY:
+    case CONDITION_CODE_HAZE:
+    case CONDITION_CODE_SMOKY:
+      strncpy(this->condition_text, "G", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_BLUSTERY:
+    case CONDITION_CODE_WINDY:
+      strncpy(this->condition_text, "H", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_COLD:
+      strncpy(this->condition_text, "I", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_CLOUDY:
+    case CONDITION_CODE_MOSTLY_CLOUDY_DAY:
+    case CONDITION_CODE_MOSTLY_CLOUDY_NIGHT:
+      strncpy(this->condition_text, "J", sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_PARTLY_CLOUDY:
+    case CONDITION_CODE_PARTLY_CLOUDY_DAY:
+    case CONDITION_CODE_PARTLY_CLOUDY_NIGHT:
+      strncpy(this->condition_text, (is_daylight ? "L" : "K"), sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_SUNNY:
+    case CONDITION_CODE_FAIR_DAY:
+    case CONDITION_CODE_CLEAR_NIGHT:
+    case CONDITION_CODE_FAIR_NIGHT:
+      strncpy(this->condition_text, (is_daylight ? "N" : "M"), sizeof(this->condition_text));
+      break;
+    case CONDITION_CODE_HOT:
+      strncpy(this->condition_text, "O", sizeof(this->condition_text));
+      break;
+    default:
+      strncpy(this->condition_text, "d", sizeof(this->condition_text));
+      break;
+  }
+}
+
+static void update_condition(Window *watchface_window, int condition_code, bool is_daylight) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Condition Code: %i", condition_code);
+  condition_code_to_icon(watchface_window, condition_code, is_daylight);
+  text_layer_set_text(this->condition_text_layer, this->condition_text);
+  text_layer_set_text_color(this->condition_text_layer, this->color_foreground_1);
+}
+
+static void send_weather_request(void *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  this->weather_update_timer = app_timer_register(this->weather_update_backoff_interval, send_weather_request, watchface_window);
+  this->weather_update_backoff_interval *= 2;
+  if (this->weather_update_backoff_interval > MAX_WEATHER_UPDATE_INTERVAL_MS) {
+    this->weather_update_backoff_interval = MAX_WEATHER_UPDATE_INTERVAL_MS;
+  }
+
+  DictionaryIterator *iterator;
+  app_message_outbox_begin(&iterator);
+  dict_write_int32(iterator, KEY_MESSAGE_TYPE, MESSAGE_TYPE_WEATHER);
+  dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i", this->temperature_units);
+  dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
+  app_message_outbox_send();
+
+  update_condition(watchface_window, CONDITION_CODE_REFRESH, false);
+  update_temperature(watchface_window, INT_MIN);
+}
+
+static void update_battery_state(Layer *layer, GContext *ctx) {
+  WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
+
+  BatteryChargeState battery_state = battery_state_service_peek();
+
+  if (battery_state.is_charging) { // Set symbol using icon font
+    strncpy(this->battery_text, "s", sizeof(this->battery_text));
+  } else if (battery_state.is_plugged) {
+    strncpy(this->battery_text, "t", sizeof(this->battery_text));
+  } else {
+    strncpy(this->battery_text, "", sizeof(this->battery_text));
+  }
+
+  text_layer_set_text(this->battery_text_layer, this->battery_text);
+
+  if (battery_state.charge_percent > this->show_battery_at_percent && !battery_state.is_charging && !battery_state.is_plugged) {
+    return; // Battery does not need shown
+  }
+
+  graphics_context_set_stroke_color(ctx, this->color_foreground_1);
+  graphics_context_set_fill_color(ctx, this->color_foreground_1);
+  graphics_draw_rect(ctx, GRect(0, 0, 14, 8));
+  graphics_fill_rect(ctx, GRect(2, 2, (battery_state.charge_percent / 10), 4), 0, GCornerNone);
+}
+
+static void update_bluetooth(Window *watchface_window, bool bluetooth_connected) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (!bluetooth_connected) {
+    strncpy(this->bluetooth_text, "b", sizeof(this->bluetooth_text));
+  } else {
+    strncpy(this->bluetooth_text, "", sizeof(this->bluetooth_text));
+  }
+
+  text_layer_set_text(this->bluetooth_text_layer, this->bluetooth_text);
+}
+
+static void update_hands(Layer *layer, GContext *ctx) {
+  WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
+
+  GRect bounds = layer_get_bounds(this->hands_layer);
+  GPoint center = grect_center_point(&bounds);
+
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+
+#ifdef PBL_COLOR
+  graphics_context_set_antialiased(ctx, true);
+#endif
+
+  // destroy old hands
+  gpath_destroy(this->hour_hand_path);
+  gpath_destroy(this->minute_hand_path);
+
+  if (this->hand_style == 1) // Traditional
+  {
+    GPathInfo hour_hand_points = { 3, (GPoint []){ {7, 0}, {0, -50}, {-7, 0} } };
+    GPathInfo minute_hand_points = { 3, (GPoint []) { {7, 0}, {0, -75}, {-7, 0} } };
+
+    // create new hands
+    this->hour_hand_path = gpath_create(&hour_hand_points);
+    this->minute_hand_path = gpath_create(&minute_hand_points);
+    gpath_move_to(this->hour_hand_path, center);
+    gpath_move_to(this->minute_hand_path, center);
+
+    // hour hand
+    graphics_context_set_stroke_color(ctx, this->color_background);
+    graphics_context_set_fill_color(ctx, this->color_foreground_2);
+    gpath_rotate_to(this->hour_hand_path, (TRIG_MAX_ANGLE * (((t->tm_hour % 12) * 6) + (t->tm_min / 10))) / (12 * 6));
+    gpath_draw_filled(ctx, this->hour_hand_path);
+    gpath_draw_outline(ctx, this->hour_hand_path);
+
+    // draw circle above hour hand, under minute hand
+    graphics_context_set_stroke_color(ctx, this->color_background);
+    graphics_draw_circle(ctx, center, 6);
+
+    // minute hand
+    graphics_context_set_stroke_color(ctx, this->color_background);
+    graphics_context_set_fill_color(ctx, this->color_foreground_2);
+    gpath_rotate_to(this->minute_hand_path, TRIG_MAX_ANGLE * t->tm_min / 60);
+    gpath_draw_filled(ctx, this->minute_hand_path);
+    gpath_draw_outline(ctx, this->minute_hand_path);
+
+    // dot in the middle
+    graphics_context_set_fill_color(ctx, this->color_foreground_2);
+    graphics_fill_circle(ctx, center, 5);
+    graphics_context_set_stroke_color(ctx, this->color_background);
+    graphics_draw_circle(ctx, center, 3);
+    graphics_context_set_fill_color(ctx, this->color_background);
+    graphics_fill_circle(ctx, center, 1);
+  }
+  else if (this->hand_style == 2) // Space
+  {
+    GPathInfo hour_hand_points = { 4, (GPoint []) { {4, 0}, {4, -45}, {-4, -45}, {-4, 0} } };
+    GPathInfo minute_hand_points = { 4, (GPoint []) { {4, 0}, {4, -70}, {-4, -70}, {-4, 0} } };
+
+    // create new hands
+    this->hour_hand_path = gpath_create(&hour_hand_points);
+    this->minute_hand_path = gpath_create(&minute_hand_points);
+    gpath_move_to(this->hour_hand_path, center);
+    gpath_move_to(this->minute_hand_path, center);
+
+    // hour hand
+    graphics_context_set_stroke_color(ctx, this->color_foreground_2);
+    graphics_context_set_fill_color(ctx, this->color_background);
+    gpath_rotate_to(this->hour_hand_path, (TRIG_MAX_ANGLE * (((t->tm_hour % 12) * 6) + (t->tm_min / 10))) / (12 * 6));
+    gpath_draw_filled(ctx, this->hour_hand_path);
+    gpath_draw_outline(ctx, this->hour_hand_path);
+
+    // minute hand
+    graphics_context_set_stroke_color(ctx, this->color_foreground_2);
+    graphics_context_set_fill_color(ctx, this->color_background);
+    gpath_rotate_to(this->minute_hand_path, TRIG_MAX_ANGLE * t->tm_min / 60);
+    gpath_draw_filled(ctx, this->minute_hand_path);
+    gpath_draw_outline(ctx, this->minute_hand_path);
+
+    // disc in the middle
+    graphics_context_set_fill_color(ctx, this->color_background);
+    graphics_fill_circle(ctx, center, 7);
+    graphics_context_set_stroke_color(ctx, this->color_foreground_2);
+    graphics_draw_circle(ctx, center, 8);
+  }
+}
+
+static void update_seconds(Layer *layer, GContext *ctx) {
+  WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
+  
+#ifdef PBL_COLOR
+  graphics_context_set_antialiased(ctx, true);
+#endif
+
+  if (this->show_seconds_hand) {
+    GRect bounds = layer_get_bounds(layer);
+    GPoint center = grect_center_point(&bounds);
+    int16_t second_hand_length = bounds.size.w / 2;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    int32_t second_angle = TRIG_MAX_ANGLE * t->tm_sec / 60;
+    GPoint second_hand = {
+      .x = (int16_t)(sin_lookup(second_angle) * (int32_t)second_hand_length / TRIG_MAX_RATIO) + center.x,
+      .y = (int16_t)(-cos_lookup(second_angle) * (int32_t)second_hand_length / TRIG_MAX_RATIO) + center.y,
+    };
+
+    graphics_context_set_stroke_color(ctx, this->color_foreground_3);
+    graphics_draw_line(ctx, second_hand, center);
+  }
+}
+
+static void update_time(Window *watchface_window, struct tm *local_time) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (this->show_seconds_hand) {
+    layer_mark_dirty(this->second_hand_layer);
+  }
+
+  if (local_time->tm_sec == 0) { // Top of minute
+    layer_mark_dirty(this->hands_layer);
+
+    if (local_time->tm_min == 0) { // Top of hour
+        update_date(watchface_window);
+    }
+
+    if (local_time->tm_min == 30 || local_time->tm_min == 0) { // Top and bottom of hour
+        send_weather_request(watchface_window);
+    }
+  }
+}
+
+static void handle_tick(struct tm *tick_time, TimeUnits units_changed) {
+  update_time(g_watchface_window, tick_time);
+}
+
+static void handle_battery_state(BatteryChargeState battery_state) {
+  WatchfaceWindow *this = window_get_user_data(g_watchface_window);
+  layer_mark_dirty(this->battery_layer);
+}
+
+static void handle_bluetooth(bool bluetooth_connected) {
+  WatchfaceWindow *this = window_get_user_data(g_watchface_window);
+
+  update_bluetooth(g_watchface_window, bluetooth_connected);
+
+  if (!bluetooth_connected && this->vibrate_on_bluetooth_disconnect) {
+    vibes_double_pulse();
+  }
+}
+
+static void watchface_tick_timer_service_subscribe(Window *watchface_window) {
+  tick_timer_service_unsubscribe();
+
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (this->show_seconds_hand) {
+    tick_timer_service_subscribe(SECOND_UNIT, handle_tick);
+  }
+  else {
+    tick_timer_service_subscribe(MINUTE_UNIT, handle_tick);
+  }
+}
+
+static Layer *battery_layer_create() {
+  Layer *battery_layer = layer_create(GRect(65, 31, 14, 8));
+  layer_set_update_proc(battery_layer, update_battery_state);
+  return battery_layer;
+}
+
+GFont get_weather_font(WatchfaceWindow *this) {
+  switch (this->temperature_font_size) {
+    case 1: // small font;
+      if (this->font_temperature_small == NULL)
+         this->font_temperature_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
+      return this->font_temperature_small;
+    break;
+    default: // no font picked.  Default to medium font, but log an error first
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "trying to set weather font, but value out of range %d", this->temperature_font_size);      
+    case 2: // medium font  (which is the same font used for date)
+       return this->font_date;
+    break;
+  }
+
+}
+
+
+static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_font, GColor layer_color) {
+  TextLayer *new_text_layer = text_layer_create(layer_bounds);
+  text_layer_set_font(new_text_layer, layer_font);
+  text_layer_set_background_color(new_text_layer, GColorClear);
+  text_layer_set_text_color(new_text_layer, layer_color);
+  text_layer_set_text_alignment(new_text_layer, GTextAlignmentCenter);
+  return new_text_layer;
+}
+
+static void watchface_window_load(Window *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  Layer *root_layer = window_get_root_layer(watchface_window);
+  GRect bounds = layer_get_bounds(root_layer);
+
+  this->font_hours = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_24));
+  this->font_date = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_15));
+  this->font_temperature_small = NULL;
+  this->font_temperature = get_weather_font(this);
+  this->font_condition = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_24));
+  this->font_battery = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_12));
+  this->font_bluetooth = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_36));
+
+  this->color_background = GColorFromHEX(this->bg_color); 
+  this->color_foreground_1 = GColorFromHEX(this->fg1_color);
+  this->color_foreground_2 = GColorFromHEX(this->fg2_color);
+  this->color_foreground_3 = GColorFromHEX(this->fg3_color);
+
+  this->background_layer = layer_create(bounds);
+  layer_set_update_proc(this->background_layer, update_background);
+  layer_add_child(root_layer, this->background_layer);
+
+  this->date_text_layer = watchface_text_layer_create(GRect(42, 121, 60, 20), this->font_date, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->date_text_layer));
+
+  this->temperature_text_layer = watchface_text_layer_create(GRect(20, 90, 44, 20), this->font_temperature, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->temperature_text_layer));
+
+  this->condition_text_layer = watchface_text_layer_create(GRect(16, 60, 44, 30), this->font_condition, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->condition_text_layer));
+
+  this->battery_layer = battery_layer_create();
+  layer_add_child(root_layer, this->battery_layer);
+
+  this->battery_text_layer = watchface_text_layer_create(GRect(63, 39, 18, 14), this->font_battery, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->battery_text_layer));
+
+  this->bluetooth_text_layer = watchface_text_layer_create(GRect(82, 60, 50, 50), this->font_bluetooth, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->bluetooth_text_layer));
+
+  this->hands_layer = layer_create(bounds);
+  layer_set_update_proc(this->hands_layer, update_hands);
+  layer_add_child(root_layer, this->hands_layer);
+  
+  this->second_hand_layer = layer_create(bounds);
+  layer_set_update_proc(this->second_hand_layer, update_seconds);
+  layer_add_child(root_layer, this->second_hand_layer);
+}
+
+static void watchface_window_appear(Window *watchface_window) {
+  update_time(watchface_window, local_time_peek());
+  watchface_tick_timer_service_subscribe(watchface_window);
+
+  battery_state_service_subscribe(handle_battery_state);
+
+  update_bluetooth(watchface_window, bluetooth_connection_service_peek());
+  bluetooth_connection_service_subscribe(handle_bluetooth);
+}
+
+static void watchface_window_disappear(Window *watchface_window) {
+  bluetooth_connection_service_unsubscribe();
+  battery_state_service_unsubscribe();
+  tick_timer_service_unsubscribe();
+}
+
+static void watchface_window_unload(Window *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (this->weather_update_timer) {
+    app_timer_cancel(this->weather_update_timer);
+    this->weather_update_timer = NULL;
+  }
+
+  gpath_destroy(this->hour_hand_path);
+  gpath_destroy(this->minute_hand_path);
+
+  layer_destroy(this->second_hand_layer);
+  this->second_hand_layer = NULL;
+
+  layer_destroy(this->hands_layer);
+  this->hands_layer = NULL;
+
+  text_layer_destroy(this->bluetooth_text_layer);
+  this->bluetooth_text_layer = NULL;
+
+  text_layer_destroy(this->battery_text_layer);
+  this->battery_text_layer = NULL;
+
+  layer_destroy(this->battery_layer);
+  this->battery_layer = NULL;
+
+  text_layer_destroy(this->condition_text_layer);
+  this->condition_text_layer = NULL;
+
+  text_layer_destroy(this->temperature_text_layer);
+  this->temperature_text_layer = NULL;
+
+  text_layer_destroy(this->date_text_layer);
+  this->date_text_layer = NULL;
+
+  layer_destroy(this->background_layer);
+  this->background_layer = NULL;
+
+  fonts_unload_custom_font(this->font_bluetooth);
+  this->font_bluetooth = NULL;
+
+  if (this->font_temperature_small != NULL) {
+    fonts_unload_custom_font(this->font_temperature_small);
+    this->font_temperature_small = NULL;
+  }
+  this->font_temperature = NULL;
+  
+  fonts_unload_custom_font(this->font_battery);
+  this->font_battery = NULL;
+
+  fonts_unload_custom_font(this->font_condition);
+  this->font_condition = NULL;
+
+  fonts_unload_custom_font(this->font_date);
+  this->font_date = NULL;
+
+  fonts_unload_custom_font(this->font_hours);
+  this->font_hours = NULL;
+}
+
+static void ready_received(void *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
+  send_weather_request(watchface_window);
+  update_date(watchface_window);
+}
+
+static void weather_received(void *watchface_window, Message const *message) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (message->message_id == this->expected_weather_message_id) {
+    if (this->weather_update_timer) {
+      app_timer_cancel(this->weather_update_timer);
+    }
+
+    update_condition(watchface_window, message->condition_code, message->is_daylight);
+    update_temperature(watchface_window, message->temperature);
+  }
+}
+
+static void settings_received(void *watchface_window, Message const *message) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "settings received");
+  
+  if (this->show_seconds_hand != message->show_seconds_hand) {
+    this->show_seconds_hand = message->show_seconds_hand;
+    persist_write_bool(MESSAGE_KEY_SHOW_SECONDS_HAND, this->show_seconds_hand);
+    update_time(watchface_window, local_time_peek());
+    watchface_tick_timer_service_subscribe(watchface_window);
+  }
+
+  if (this->temperature_units != message->temperature_units) {
+    this->temperature_units = message->temperature_units;
+    persist_write_int(MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
+    this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
+    send_weather_request(watchface_window);
+  }
+
+  if (this->vibrate_on_bluetooth_disconnect != message->vibrate_on_bluetooth_disconnect) {
+    this->vibrate_on_bluetooth_disconnect = message->vibrate_on_bluetooth_disconnect;
+    persist_write_bool(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, this->vibrate_on_bluetooth_disconnect);
+  }
+
+  if (this->show_battery_at_percent != message->show_battery_at_percent) {
+    this->show_battery_at_percent = message->show_battery_at_percent;
+    persist_write_int(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, this->show_battery_at_percent);
+    layer_mark_dirty(this->battery_layer);
+  }
+
+  if (this->hand_style != message->hand_style) {
+
+    this->hand_style = message->hand_style;
+    persist_write_int(MESSAGE_KEY_HAND_STYLE, this->hand_style);
+    update_time(watchface_window, local_time_peek());
+  }
+  
+  if (this->temperature_font_size != message->temperature_font_size) {
+    this->temperature_font_size = message->temperature_font_size;
+    persist_write_int(MESSAGE_KEY_TEMPERATURE_SIZE, this->temperature_font_size);
+    this->font_temperature = get_weather_font(this);
+    text_layer_set_font(this->temperature_text_layer, this->font_temperature);
+  }
+  
+  if (this->bg_color != message->bg_color) {
+    this->bg_color = message->bg_color;
+    persist_write_int(MESSAGE_KEY_BG_COLOR, this->bg_color);
+    this->color_background = GColorFromHEX(message->bg_color);
+    layer_mark_dirty(this->background_layer);
+  }
+  
+  if (this->fg1_color != message->fg1_color) {
+    this->fg1_color = message->fg1_color;
+    persist_write_int(MESSAGE_KEY_FG1_COLOR, this->fg1_color);
+    this->color_foreground_1 = GColorFromHEX(message->fg1_color);
+    layer_mark_dirty(this->background_layer);
+    this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
+    send_weather_request(watchface_window);
+    update_date(watchface_window);
+  }
+  
+  if (this->fg2_color != message->fg2_color) {
+    this->fg2_color = message->fg2_color;
+    persist_write_int(MESSAGE_KEY_FG2_COLOR, this->fg2_color);
+    this->color_foreground_2 = GColorFromHEX(message->fg2_color);
+  }
+  
+  if (this->fg3_color != message->fg3_color) {
+    this->fg3_color = message->fg3_color;
+    persist_write_int(MESSAGE_KEY_FG3_COLOR, this->fg3_color);
+    this->color_foreground_3 = GColorFromHEX(message->fg3_color);
+  }
+  
+  
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "exiting settings received");
+  
+}
+
+static void set_clay_message(Message *message)
+// In the original HTML based settings code, we set our settings messsage with a message type.
+//  However, so far, I have not found a unique way to flag CLAY based settings, so anytime we get a Clay based setting,
+//  we flag this message as having come from Clay.
+{
+  message->message_type = MESSAGE_TYPE_SETTINGS;  
+}
+
+static void inbox_received(DictionaryIterator *iterator, void *watchface_window) {
+  Message message;
+  memset(&message, 0xff, sizeof(message));
+
+
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Inbox received");
+  for (Tuple *tuple = dict_read_first(iterator); tuple != NULL; tuple = dict_read_next(iterator)) {
+
+    switch(tuple->key) {
+      case KEY_MESSAGE_TYPE:
+        message.message_type = tuple->value->int32;
+        break;
+      case KEY_MESSAGE_ID:
+        message.message_id = tuple->value->int32;
+        break;
+      case KEY_CONDITION_CODE:
+        message.condition_code = tuple->value->int32;
+        break;
+      case KEY_TEMPERATURE:
+        message.temperature = tuple->value->int32;
+        break;
+      case KEY_IS_DAYLIGHT:
+        message.is_daylight = tuple->value->int32;
+        break;
+      case MESSAGE_KEY_SHOW_SECONDS_HAND:
+        message.show_seconds_hand = tuple->value->int32;
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_TEMPERATURE_UNITS:
+        message.temperature_units = atoi(tuple->value->cstring);
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT:
+        message.vibrate_on_bluetooth_disconnect = tuple->value->int32;
+        set_clay_message(&message);
+      break;
+      case MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT:
+        message.show_battery_at_percent = tuple->value->int32;
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_HAND_STYLE:
+        message.hand_style = atoi(tuple->value->cstring);
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_TEMPERATURE_SIZE:
+        message.temperature_font_size = atoi(tuple->value->cstring);
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_BG_COLOR:
+        message.bg_color = tuple->value->uint32;
+        set_clay_message(&message);
+        break;    
+      case MESSAGE_KEY_FG1_COLOR:
+        message.fg1_color = tuple->value->uint32;
+        set_clay_message(&message);
+        break;    
+      case MESSAGE_KEY_FG2_COLOR:
+        message.fg2_color = tuple->value->uint32;
+        set_clay_message(&message);
+        break;    
+      case MESSAGE_KEY_FG3_COLOR:
+        message.fg3_color = tuple->value->uint32;
+        set_clay_message(&message);
+        break;    
+
+      default:
+        APP_LOG(APP_LOG_LEVEL_ERROR, "Application received unknown key: %lu", tuple->key);
+        break;
+    }
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Finished parsing the inbox");
+  }
+
+  switch (message.message_type) {
+    case MESSAGE_TYPE_READY:
+      ready_received(watchface_window);
+      break;
+    case MESSAGE_TYPE_WEATHER:
+      weather_received(watchface_window, &message);
+      break;
+    case MESSAGE_TYPE_SETTINGS:
+       settings_received(watchface_window, &message);
+       break;
+    default:
+      APP_LOG(APP_LOG_LEVEL_ERROR, "Application received message of unknown type: %d ", message.message_type);
+      break;
+  }
+}
+
+Window *watchface_window_create() {
+  Window *watchface_window = window_create();
+
+  WatchfaceWindow *this = malloc(sizeof(*this));
+  *this = (__typeof(*this)) {
+    // IMPORTANT: Keep default values in sync with watchface_window.js.
+    .show_seconds_hand = persist_read_bool_or_default(MESSAGE_KEY_SHOW_SECONDS_HAND, false),
+    .temperature_units = persist_read_int_or_default(MESSAGE_KEY_TEMPERATURE_UNITS, TEMPERATURE_UNITS_FAHRENHEIT),
+    .vibrate_on_bluetooth_disconnect = persist_read_bool_or_default(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, true),
+    .show_battery_at_percent = persist_read_int_or_default(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, 40),
+    .hand_style = persist_read_int_or_default(MESSAGE_KEY_HAND_STYLE, 1),
+    .temperature_font_size = persist_read_int_or_default(MESSAGE_KEY_TEMPERATURE_SIZE, 2),
+    .bg_color = persist_read_int_or_default(MESSAGE_KEY_BG_COLOR, 0x000055),    // OxfordBlue
+    .fg1_color = persist_read_int_or_default(MESSAGE_KEY_FG1_COLOR, 0xAAAA55),  // Brass
+    .fg2_color = persist_read_int_or_default(MESSAGE_KEY_FG2_COLOR, 0xFFFF55),  //  Iterine
+    .fg3_color = persist_read_int_or_default(MESSAGE_KEY_FG3_COLOR, 0xFF0000),   // Red
+   
+
+    .font_hours = NULL,
+    .font_date = NULL,
+    .font_temperature = NULL,
+    .font_temperature_small = NULL,
+    .font_condition = NULL,
+    .font_battery = NULL,
+    .font_bluetooth = NULL,
+
+    .background_layer = NULL,
+
+    .date_text_layer = NULL,
+    .date_text = "",
+
+    .temperature_text_layer = NULL,
+    .temperature_text = "",
+
+    .condition_text_layer = NULL,
+    .condition_text = "",
+
+    .battery_layer = NULL,
+    .battery_text_layer = NULL,
+    .battery_text = "",
+
+    .bluetooth_text_layer = NULL,
+    .bluetooth_text = "",
+
+    .hands_layer = NULL,
+    .second_hand_layer = NULL,
+
+    .weather_update_timer = NULL,
+    .weather_update_backoff_interval = -1,
+    .expected_weather_message_id = 0,
+  };
+  window_set_user_data(watchface_window, this);
+
+  window_set_window_handlers(watchface_window, (WindowHandlers) {
+    .load = watchface_window_load,
+    .appear = watchface_window_appear,
+    .disappear = watchface_window_disappear,
+    .unload = watchface_window_unload
+  });
+
+  app_message_set_context(watchface_window);
+  app_message_register_inbox_received(inbox_received);
+ //app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
+  app_message_open(1000,1000);
+
+  g_watchface_window = watchface_window;
+  return watchface_window;
+}
+
+void watchface_window_destroy(Window *watchface_window) {
+  g_watchface_window = NULL;
+
+  app_message_deregister_callbacks();
+
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  free(this);
+
+  window_destroy(watchface_window);
+}
+
+void watchface_window_show(Window *watchface_window) {
+  window_stack_push(watchface_window, true);
+}
