@@ -79,8 +79,7 @@ function writeToLocalStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-
-function onPositionSuccess(messageId, temperatureUnits, position) {
+function queryWeather(messageId, temperatureUnits, position) {
   var query = encodeURIComponent('select astronomy, item.condition, units.temperature from weather.forecast where woeid in (select place.woeid from flickr.places where api_key="a4cd191f6a5f639df681211751f8c74e" AND lat="' + position.coords.latitude + '" AND lon="' + position.coords.longitude + '")');
   var url = 'https://query.yahooapis.com/v1/public/yql?q=' + query + '&format=json';
 
@@ -104,13 +103,14 @@ function onPositionError(error) {
   console.log("Failed to obtain geographical location.");
 }
 
-function sendWeatherRequest(messageId, temperatureUnits) {
-  // TODO(maksym): Subscribe to position updates,
-  //               see http://developer.getpebble.com/guides/js-apps/pebblekit-js/js-capabilities/
-  navigator.geolocation.getCurrentPosition(onPositionSuccess.bind(null, messageId, temperatureUnits), onPositionError, {
+function sendWeatherRequest(messageID, temperatureUnits) {
+  // KH:  Looked into Sean's suggestion to be notified of position updates instead of polling, but that
+  //  appeared to use more battery as the updates were constantly coming in.
+  navigator.geolocation.getCurrentPosition(queryWeather.bind(null, messageID, temperatureUnits), onPositionError, {
     timeout: 15000,
-    maximumAge: 60000
+    maximumAge: 1000 * 60 * 60 * 8
   });
+
 }
 
 Pebble.addEventListener('ready', function(event) {
@@ -120,12 +120,10 @@ Pebble.addEventListener('ready', function(event) {
 });
 
 Pebble.addEventListener('appmessage', function(event) {
-  //ar str = JSON.stringify(event);
-  //console.log("Message dump"+ str);
   var messageType = event.payload['KEY_MESSAGE_TYPE'];
   switch (messageType) {
     case MESSAGE_TYPE_WEATHER:
-      console.log("PebbleKit JS sending weather request with units of " + event.payload['TEMPERATURE_UNITS']);
+      console.log("PebbleKit JS sending weather request with with message id of " + event.payload['KEY_MESSAGE_ID'] + " and units of " + event.payload['TEMPERATURE_UNITS']);
       sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS']);
       break;
     default:
@@ -134,34 +132,3 @@ Pebble.addEventListener('appmessage', function(event) {
   }
 });
 
-
-//Pebble.addEventListener('showConfigurationXXX', function(event) {
-
-  // IMPORTANT: Keep default values in sync with purist_window.c.
-  //            Do not use booleans, they are distorted when sending the message from Android.
-//  var settings = {
-//    'MESSAGE_KEY_SHOW_SECONDS_HAND': readFromLocalStorage('MESSAGE_KEY_SHOW_SECONDS_HAND', 0),
-//    'MESSAGE_KEY_TEMPERATURE_UNITS': readFromLocalStorage('MESSAGE_KEY_TEMPERATURE_UNITS', TEMPERATURE_UNITS_FAHRENHEIT),
-//    'MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT': readFromLocalStorage('MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT', 1),
-////    'MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT': readFromLocalStorage('MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT', 40),
-//    'MESSAGE_KEY_HAND_STYLE': readFromLocalStorage('MESSAGE_KEY_HAND_STYLE', 1),
-//    'MESSAGE_KEY_TEMPERATURE_SIZE': readFromLocalStorage('MESSAGE_KEY_TEMPERATURE_SIZE', 2)
-//  };
-//  Pebble.openURL('http://www.reliantwebsolutions.com/pebble-config-test2.html?settings=' + encodeURIComponent(JSON.stringify(settings)));
-//});
-
-//Pebble.addEventListener('webviewclosedXX', function(event) {
-//  if (event.response === '') {
-//    return;
-//  }
-
-//  var settings = JSON.parse(decodeURIComponent(event.response));
-//  for (var key in settings) {
-//    if (settings.hasOwnProperty(key)) {
-//      writeToLocalStorage(key, settings[key]);
-//    }
-//  }
-//
-//  settings['KEY_MESSAGE_TYPE'] = MESSAGE_TYPE_SETTINGS;
-//  Pebble.sendAppMessage(settings);
-//});

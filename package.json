@@ -27,7 +27,10 @@
             "SHOW_SECONDS_HAND": 5,
             "TEMPERATURE_SIZE": 14,
             "TEMPERATURE_UNITS": 6,
-            "VIBRATE_ON_BLUETOOTH_DISCONNECT": 7
+            "VIBRATE_ON_BLUETOOTH_DISCONNECT": 7,
+            "WEATHER_QUIET_TIME": 15,
+            "WEATHER_QUIET_TIME_START": 16,
+            "WEATHER_QUIET_TIME_STOP": 17
         },
         "projectType": "native",
         "resources": {
@@ -83,10 +86,10 @@
             "basalt",
             "chalk"
         ],
-        "uuid": "8ec25a28-e8fb-46d5-a735-067f973c84fb",
+        "uuid": "087fcf10-318e-4b0c-b33a-b3d63b680fa1",
         "watchapp": {
             "watchface": true
         }
     },
-    "version": "1.0.0"
+    "version": "1.1.0"
 }

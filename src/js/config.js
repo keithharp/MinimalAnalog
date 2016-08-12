@@ -122,6 +122,41 @@ module.exports = [
       },
     ]
       },
+      {
+      "type": "section",
+      "items": [
+        {
+        "type": "heading",
+        "defaultValue": "Weather Quiet Time Settings"
+      },
+      {
+        "type": "toggle",
+        "messageKey": "WEATHER_QUIET_TIME",
+        "label": "Suppress Weather Updates At These Times",
+        "defaultValue": false
+      },
+      {
+        "type": "text",
+        "defaultValue": "If ALWAYS is not selected, choose the times your watch will not update the weather"
+      },
+      {
+        "type": "slider",
+        "messageKey": "WEATHER_QUIET_TIME_START",
+        "defaultValue": 23,
+        "label": "Weather Updates Stop (24 hr)",
+        "min": 0,
+        "max": 23
+        },
+      {
+        "type": "slider",
+        "messageKey": "WEATHER_QUIET_TIME_STOP",
+        "defaultValue": 6,
+        "label": "Weather Updates Start (24 hr)",
+        "min": 0,
+        "max": 23
+      }
+    ]
+      },
   {
     "type": "submit",
     "defaultValue": "Save Settings"

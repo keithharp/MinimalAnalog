@@ -1,17 +1,41 @@
 /*
+ * Minimal Analog 2 - A watchface for Pebble, Pebble Time, and Pebble Round
+ *
+ *
+ * Version 1.1 adds
+ *    - user option for restricting weather updates to certain hours, default 7am to 11pm - DONE
+ *
+ * Version 1.0
+ *
+ *  Keith Harp -- keithharp@bellsouth.net
+ *
+ * Based on the original design and work by Sean Ullyatt of Reliant Web Solutions
+ * After he decided he could no longer work on it, he graciously allowed anyone to pick
+ * it up and take it on.
+ *
  * Minimal Analog - A watchface for Pebble, Pebble Steel, Pebble Time, and Pebble Time Steel
  * Version 2.0
+ *
+ * Items that were on Sean's TODO list were:
+  * TODO:
+ *   - Add user option to show battery indicator at a certain charge percent, default 40% - DONE
+ *   - Add options for setting colors, foreground, background, weather, bluetooth, etc. - DONE
+ *   - Add user option to select the style of hand - traditional or space - DONE
+ *   - Add user option for restricting weather updates to certain hours, default 7am to 11pm - DONE
+ *   - Add user option for user to select date format, default “%a %d"
+ *   - Add weather forecast in bluetooth area on double wrist-flick
+ *   - Improve battery life by avoiding as many location checks - TESTED but REJECTED
+ *
+ * In addition, I have the following thoughts
+ * TODO:
+ *   - Replace web based settings (no longer available) with Clay based ones - DONE
+ *   - Allow a larger font choice for the temperature - DONE
+ *   - Use Quiet Time as the time to avoid weather updates rather than (or in addition to) fixed times - Not possible with current APIs
  *
  * Sean Ullyatt - sullyatt@gmail.com
  * Reliant Web Solutions, LLC (c) 2015 - All Right Reserved
  *
- * TODO:
- *   - Add user option to show battery indicator at a certain charge percent, default 40% - DONE
- *   - Add options for setting colors, foreground, background, weather, bluetooth, etc. - IN PROGRESS
- *   - Add user option to select the style of hand - traditional or space - DONE
- *   - Add user option for restricting weather updates to certain hours, default 7am to 11pm
- *   - Add user option for user to select date format, default “%a %d"
- *   - Add weather forecast in bluetooth area on double wrist-flick
+
  */
 #include "watchface_window.h"
 #include "pebble_patch.h"
@@ -41,6 +65,10 @@ typedef struct {
       int fg2_color;
       int fg3_color;
       int temperature_font_size;
+      bool weather_quiet_time;
+      int weather_quiet_time_start;
+      int weather_quiet_time_stop;
+ 
     };
   };
 } Message;
@@ -61,6 +89,10 @@ typedef struct {
 #define MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT 8
 #define MESSAGE_KEY_HAND_STYLE 9
 #define MESSAGE_KEY_TEMPERATURE_SIZE 14
+#define MESSAGE_KEY_WEATHER_QUIET_TIME 15
+#define MESSAGE_KEY_WEATHER_QUIET_TIME_START 16
+#define MESSAGE_KEY_WEATHER_QUIET_TIME_STOP 17
+
 
 // Keys used in color selection.
 #define MESSAGE_KEY_BG_COLOR 10
@@ -160,6 +192,10 @@ typedef struct {
   int fg2_color;
   int fg3_color;
 
+  bool weather_quiet_time;
+  int weather_quiet_time_start;
+  int weather_quiet_time_stop;
+  
   Layer *background_layer;
 
   TextLayer *date_text_layer;
@@ -526,6 +562,22 @@ static void update_seconds(Layer *layer, GContext *ctx) {
   }
 }
 
+
+static bool inQuietTime(WatchfaceWindow *this, int hour) {
+  
+  bool quiet = true;
+  if (!this->weather_quiet_time)
+    quiet = false;
+  else if (this->weather_quiet_time_start == this->weather_quiet_time_stop)  // if both values are the same, then never update the weather
+    quiet = true;
+  else if (this->weather_quiet_time_start < this->weather_quiet_time_stop ) // this would be like start at 1am, and stop at 6am
+    quiet = (hour >= this->weather_quiet_time_start) && (hour < this->weather_quiet_time_stop);
+  else  // this would be like start at 11pm and stop at 6am
+    quiet = (hour >= this->weather_quiet_time_start) || (hour < this->weather_quiet_time_stop);
+  // APP_LOG(APP_LOG_LEVEL_DEBUG, "checking for inQuietTime (%d %d %d) ==  %d", this->weather_quiet_time, this->weather_quiet_time_start, this->weather_quiet_time_stop, quiet);     
+  return quiet;  
+}
+
 static void update_time(Window *watchface_window, struct tm *local_time) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
@@ -536,11 +588,11 @@ static void update_time(Window *watchface_window, struct tm *local_time) {
   if (local_time->tm_sec == 0) { // Top of minute
     layer_mark_dirty(this->hands_layer);
 
-    if (local_time->tm_min == 0) { // Top of hour
+    if (local_time->tm_min == 0 && local_time->tm_hour == 0) { // Midnight
         update_date(watchface_window);
     }
 
-    if (local_time->tm_min == 30 || local_time->tm_min == 0) { // Top and bottom of hour
+    if ((local_time->tm_min == 30 || local_time->tm_min == 0) && !inQuietTime(this, local_time->tm_hour)) { // Top and bottom of hour
         send_weather_request(watchface_window);
     }
   }
@@ -829,6 +881,21 @@ static void settings_received(void *watchface_window, Message const *message) {
     this->color_foreground_3 = GColorFromHEX(message->fg3_color);
   }
   
+  if (this->weather_quiet_time != message->weather_quiet_time) {
+    this->weather_quiet_time = message->weather_quiet_time;
+    persist_write_bool(MESSAGE_KEY_WEATHER_QUIET_TIME, this->weather_quiet_time);
+  }
+
+  if (this->weather_quiet_time_start != message->weather_quiet_time_start) {
+    this->weather_quiet_time_start = message->weather_quiet_time_start;
+    persist_write_int(MESSAGE_KEY_WEATHER_QUIET_TIME_START, this->weather_quiet_time_start);
+  }
+
+  if (this->weather_quiet_time_stop != message->weather_quiet_time_stop) {
+    this->weather_quiet_time_stop = message->weather_quiet_time_stop;
+    persist_write_int(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP, this->weather_quiet_time_stop);
+  }
+  
   
   APP_LOG(APP_LOG_LEVEL_DEBUG, "exiting settings received");
   
@@ -906,12 +973,22 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.fg3_color = tuple->value->uint32;
         set_clay_message(&message);
         break;    
-
+      case MESSAGE_KEY_WEATHER_QUIET_TIME:
+        message.weather_quiet_time = tuple->value->int32;
+        set_clay_message(&message);
+        break;   
+      case MESSAGE_KEY_WEATHER_QUIET_TIME_START:
+        message.weather_quiet_time_start = tuple->value->int32;
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_WEATHER_QUIET_TIME_STOP:
+        message.weather_quiet_time_stop = tuple->value->int32;
+        set_clay_message(&message);
+        break;
       default:
         APP_LOG(APP_LOG_LEVEL_ERROR, "Application received unknown key: %lu", tuple->key);
         break;
     }
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Finished parsing the inbox");
   }
 
   switch (message.message_type) {
@@ -947,6 +1024,9 @@ Window *watchface_window_create() {
     .fg2_color = persist_read_int_or_default(MESSAGE_KEY_FG2_COLOR, 0xFFFF55),  //  Iterine
     .fg3_color = persist_read_int_or_default(MESSAGE_KEY_FG3_COLOR, 0xFF0000),   // Red
    
+    .weather_quiet_time = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME,0),
+    .weather_quiet_time_start = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME_START, 23),
+    .weather_quiet_time_stop = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP,6),
 
     .font_hours = NULL,
     .font_date = NULL,
