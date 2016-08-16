@@ -1,5 +1,9 @@
 #include "pebble_patch.h"
 
+// Note that we are actually storing the settings values twice:  Once on the phone as part of Clay, and once on the watch as part of persistent storage.
+//  This is on purpose to allow the settings to be retained when the app starts even if the phone is currently disconnected, but does have a potential for
+// them getting out of sync.   If they do get out of sync, they should be fixed the next time that clay is run for settings.
+
 bool persist_read_bool_or_default(uint32_t key, bool default_value) {
   return persist_exists(key) ? persist_read_bool(key) : default_value;
 }

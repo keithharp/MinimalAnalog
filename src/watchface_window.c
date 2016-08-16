@@ -3,10 +3,10 @@
  *
  *
  * Version 1.2 adds
- *   - user options to turn on second hand for a defined period or until tapped again by tapping.
- *   - pay attention to bluetooth status to avoid pinging for weather if not connected to save battery
- *   - keep cached location and weather instead of showing sync symbol if location is < 12 hours old and weather is less than 90 minutes old.
- *   - refactor settings code to avoid repeating the same action if multiple settings require an update to a watchface element.
+ *   - user options to turn on second hand for a defined period or until tapped again by tapping. - DONE
+ *   - pay attention to bluetooth status to avoid pinging for weather if not connected to save battery - DONE
+ *   - keep cached location and weather and don't overwrite with the sync logo -- DONE by moving sync logo to BT location
+ *   - refactor settings code to avoid repeating the same action if multiple settings require an update to a watchface element. -- DONE
  *
  * Version 1.1 adds
  *    - user option for restricting weather updates to certain hours, default 7am to 11pm - DONE
@@ -188,6 +188,7 @@ typedef struct {
   
   int temperature_units;
   bool vibrate_on_bluetooth_disconnect;
+  bool bluetooth_connected;
   int show_battery_at_percent;
   int hand_style;
   int temperature_font_size;
@@ -407,10 +408,25 @@ static void condition_code_to_icon(Window *watchface_window, int condition_code,
   }
 }
 
+
+static void mark_as_syncing(Window* watchface_window, bool syncing) {
+#if 0
+  update_condition(watchface_window, CONDITION_CODE_REFRESH, false);
+  update_temperature(watchface_window, INT_MIN);  
+#else
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  if (syncing) {
+    strncpy(this->bluetooth_text, "f", sizeof(this->bluetooth_text));
+  } else {
+    strncpy(this->bluetooth_text, "", sizeof(this->bluetooth_text));
+  }
+#endif
+}
+
 static void update_condition(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Condition Code: %i", condition_code);
+  
+  mark_as_syncing(watchface_window, false);
   condition_code_to_icon(watchface_window, condition_code, is_daylight);
   text_layer_set_text(this->condition_text_layer, this->condition_text);
   text_layer_set_text_color(this->condition_text_layer, this->color_foreground_1);
@@ -418,6 +434,9 @@ static void update_condition(Window *watchface_window, int condition_code, bool 
 
 static void send_weather_request(void *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
+  
+  if (!this->bluetooth_connected)
+    return; // short circuit and stop looking for weather if bluetooth is currently disconnected
 
   this->weather_update_timer = app_timer_register(this->weather_update_backoff_interval, send_weather_request, watchface_window);
   this->weather_update_backoff_interval *= 2;
@@ -432,9 +451,8 @@ static void send_weather_request(void *watchface_window) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i", this->temperature_units);
   dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
   app_message_outbox_send();
-
-  update_condition(watchface_window, CONDITION_CODE_REFRESH, false);
-  update_temperature(watchface_window, INT_MIN);
+  
+  mark_as_syncing(watchface_window, true);
 }
 
 static void update_battery_state(Layer *layer, GContext *ctx) {
@@ -470,8 +488,12 @@ static void update_bluetooth(Window *watchface_window, bool bluetooth_connected)
   } else {
     strncpy(this->bluetooth_text, "", sizeof(this->bluetooth_text));
   }
-
+  this->bluetooth_connected = bluetooth_connected;
+  
   text_layer_set_text(this->bluetooth_text_layer, this->bluetooth_text);
+  
+  if (bluetooth_connected) // if we just got reconnected, then update the weather
+    send_weather_request(watchface_window);
 }
 
 static void update_hands(Layer *layer, GContext *ctx) {
@@ -698,8 +720,6 @@ static void turn_off_seconds_after_timer(void* watch_window) {
   this->seconds_duration_timer = NULL;
   if (this->seconds_hand_mode == SECONDS_HAND_FOR_FIXED_DURATION_ON) {
     this->seconds_hand_mode = SECONDS_HAND_FOR_FIXED_DURATION_OFF;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "turning off seconds after timer %x", this->seconds_hand_mode);
-    
     force_immediate_time_update(g_watchface_window, true, true, false);
   } else {
     APP_LOG(APP_LOG_LEVEL_ERROR, "received request to turn off seconds based on timer but currently in wrong mode %d", this->seconds_hand_mode);
@@ -711,14 +731,10 @@ static void turn_off_seconds_after_timer(void* watch_window) {
 static void register_seconds_duration_timer(Window* watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   int duration = this->seconds_hand_duration * 60000;
-  duration = duration / 10;
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "register a duration timer %d", duration);
   
   if (this->seconds_duration_timer)  { // if it already exists, reschedule it.
       app_timer_reschedule(this->seconds_duration_timer, duration);  
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "reschedule a timer");
-  } else {
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "register an app timer");
+   } else {
       this->seconds_duration_timer = app_timer_register(duration, turn_off_seconds_after_timer, this);
   }
 }
@@ -748,12 +764,11 @@ static void tap_received(AccelAxisType axis, int32_t direction) {
   bool bUpdateTickTimerService = false;
   bool bUpdateDurationTimer = false;
   
-  APP_LOG(APP_LOG_LEVEL_ERROR, "received tap");
   double_tap = (now - this->most_recent_tap < 2);
   this->most_recent_tap = now;
   // ignore double, triple taps, based on if time is less than a second apart
   if (double_tap) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "ignored tap");
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "ignored tap");
   } else {
   
     switch (this->seconds_hand_mode) {
@@ -781,9 +796,7 @@ static void tap_received(AccelAxisType axis, int32_t direction) {
       break;
     }
     
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "tap received - new  hand mode change %x", this->seconds_hand_mode);
     force_immediate_time_update(g_watchface_window, bUpdateTime, bUpdateTickTimerService, bUpdateDurationTimer);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "tap received after force immediat - new  hand mode change %x", this->seconds_hand_mode);
   }
   
 }
@@ -834,6 +847,8 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->bluetooth_text_layer = watchface_text_layer_create(GRect(82, 60, 50, 50), this->font_bluetooth, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->bluetooth_text_layer));
+  
+  this->bluetooth_connected = false;
 
   this->hands_layer = layer_create(bounds);
   layer_set_update_proc(this->hands_layer, update_hands);
@@ -966,9 +981,6 @@ static void settings_received(void *watchface_window, Message const *message) {
   bool bUpdateTickTimer = true;
   bool bUpdateTapSensor = true;
   
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "settings received");
-  
-  
   if (this->seconds_hand_duration != message->seconds_hand_duration) {
     this->seconds_hand_duration = message->seconds_hand_duration;
     persist_write_int(MESSAGE_KEY_SECONDS_HAND_DURATION, this->seconds_hand_duration);
@@ -983,7 +995,6 @@ static void settings_received(void *watchface_window, Message const *message) {
           accel_tap_service_unsubscribe();
     }
     this->seconds_hand_mode = message->seconds_hand_mode;
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "settings set hand mode change %x", this->seconds_hand_mode);
     persist_write_int(MESSAGE_KEY_SHOW_SECONDS_HAND, this->seconds_hand_mode);
   }
 
@@ -1068,10 +1079,6 @@ static void settings_received(void *watchface_window, Message const *message) {
     tap_service_subscribe(this);
   }
  
-  
-  
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "exiting settings received");
-  
 }
 
 static void set_clay_message(Message *message)
@@ -1086,8 +1093,6 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
   Message message;
   memset(&message, 0xff, sizeof(message));
 
-
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Inbox received");
   for (Tuple *tuple = dict_read_first(iterator); tuple != NULL; tuple = dict_read_next(iterator)) {
 
     switch(tuple->key) {
@@ -1107,10 +1112,7 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.is_daylight = tuple->value->int32;
         break;
       case MESSAGE_KEY_SHOW_SECONDS_HAND:
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "got seconds hand mode change %s", tuple->value->cstring);
         message.seconds_hand_mode = atoi(tuple->value->cstring);
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "got seconds hand mode change %x", message.seconds_hand_mode);
-      
         set_clay_message(&message);
         break;
      case MESSAGE_KEY_SECONDS_HAND_DURATION:
