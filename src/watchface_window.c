@@ -2,6 +2,12 @@
  * Minimal Analog 2 - A watchface for Pebble, Pebble Time, and Pebble Round
  *
  *
+ * Version 1.2 adds
+ *   - user options to turn on second hand for a defined period or until tapped again by tapping.
+ *   - pay attention to bluetooth status to avoid pinging for weather if not connected to save battery
+ *   - keep cached location and weather instead of showing sync symbol if location is < 12 hours old and weather is less than 90 minutes old.
+ *   - refactor settings code to avoid repeating the same action if multiple settings require an update to a watchface element.
+ *
  * Version 1.1 adds
  *    - user option for restricting weather updates to certain hours, default 7am to 11pm - DONE
  *
@@ -55,7 +61,7 @@ typedef struct {
 
     // Settings message.
     struct {
-      bool show_seconds_hand;
+      int seconds_hand_mode;
       int temperature_units;
       bool vibrate_on_bluetooth_disconnect;
       int show_battery_at_percent;
@@ -68,6 +74,7 @@ typedef struct {
       bool weather_quiet_time;
       int weather_quiet_time_start;
       int weather_quiet_time_stop;
+      int seconds_hand_duration;
  
     };
   };
@@ -88,17 +95,15 @@ typedef struct {
 #define MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT 7
 #define MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT 8
 #define MESSAGE_KEY_HAND_STYLE 9
-#define MESSAGE_KEY_TEMPERATURE_SIZE 14
-#define MESSAGE_KEY_WEATHER_QUIET_TIME 15
-#define MESSAGE_KEY_WEATHER_QUIET_TIME_START 16
-#define MESSAGE_KEY_WEATHER_QUIET_TIME_STOP 17
-
-
-// Keys used in color selection.
 #define MESSAGE_KEY_BG_COLOR 10
 #define MESSAGE_KEY_FG1_COLOR 11
 #define MESSAGE_KEY_FG2_COLOR 12
 #define MESSAGE_KEY_FG3_COLOR 13
+#define MESSAGE_KEY_TEMPERATURE_SIZE 14
+#define MESSAGE_KEY_WEATHER_QUIET_TIME 15
+#define MESSAGE_KEY_WEATHER_QUIET_TIME_START 16
+#define MESSAGE_KEY_WEATHER_QUIET_TIME_STOP 17
+#define MESSAGE_KEY_SECONDS_HAND_DURATION 18
 
 // Message types.
 #define MESSAGE_TYPE_READY 0
@@ -108,6 +113,17 @@ typedef struct {
 // Temperature units.
 #define TEMPERATURE_UNITS_CELSIUS 0
 #define TEMPERATURE_UNITS_FAHRENHEIT 1
+
+// state of how to handle seconds hand  -- 0x08 mask means show seconds hand   0x04 means we need to be registerd for the tap sensor
+#define SHOW_SECONDS_HAND(x)  (x & 0x8)
+#define TAP_SENSOR_NEEDED(x)  (x & 0x4)
+#define SECONDS_HAND_OFF 0x0                        // binary 0000 or 0
+#define SECONDS_HAND_ON 0x8                         // binary 1000 or 8
+#define SECONDS_HAND_FOR_FIXED_DURATION_OFF 0x5     // binary 0101 or 5
+#define SECONDS_HAND_FOR_FIXED_DURATION_ON 0xd      // binary 1101 or 13
+#define SECONDS_HAND_TOGGLE_TAP_OFF 0x6             // binary 0110 or 6
+#define SECONDS_HAND_TOGGLE_TAP_ON 0xe              // binary 1110 or 15
+
 
 // Condition codes.
 // Reference: https://developer.yahoo.com/weather/documentation.html#codes
@@ -165,7 +181,11 @@ int const MIN_WEATHER_UPDATE_INTERVAL_MS = 10 * 1000;
 int const MAX_WEATHER_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 
 typedef struct {
-  bool show_seconds_hand;
+  int seconds_hand_mode;
+  int seconds_hand_duration;
+  AppTimer *seconds_duration_timer; 
+  time_t most_recent_tap;
+  
   int temperature_units;
   bool vibrate_on_bluetooth_disconnect;
   int show_battery_at_percent;
@@ -226,6 +246,10 @@ typedef struct {
 } WatchfaceWindow;
 
 static Window *g_watchface_window = NULL;
+
+static void force_immediate_time_update(Window* watchface_window, bool bUpdateTime, bool bUpdateTickTimerService, bool bUpdateDurationTimer);
+
+
 
 static void update_background(Layer *layer, GContext *ctx) {
   WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
@@ -537,14 +561,16 @@ static void update_hands(Layer *layer, GContext *ctx) {
   }
 }
 
+
+
 static void update_seconds(Layer *layer, GContext *ctx) {
   WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
   
 #ifdef PBL_COLOR
   graphics_context_set_antialiased(ctx, true);
 #endif
-
-  if (this->show_seconds_hand) {
+  
+  if (SHOW_SECONDS_HAND(this->seconds_hand_mode)) {
     GRect bounds = layer_get_bounds(layer);
     GPoint center = grect_center_point(&bounds);
     int16_t second_hand_length = bounds.size.w / 2;
@@ -581,9 +607,9 @@ static bool inQuietTime(WatchfaceWindow *this, int hour) {
 static void update_time(Window *watchface_window, struct tm *local_time) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
-  if (this->show_seconds_hand) {
+  //if (SHOW_SECONDS_HAND(this->seconds_hand_mode)) {
     layer_mark_dirty(this->second_hand_layer);
-  }
+  //}
 
   if (local_time->tm_sec == 0) { // Top of minute
     layer_mark_dirty(this->hands_layer);
@@ -618,11 +644,12 @@ static void handle_bluetooth(bool bluetooth_connected) {
 }
 
 static void watchface_tick_timer_service_subscribe(Window *watchface_window) {
-  tick_timer_service_unsubscribe();
-
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
-  if (this->show_seconds_hand) {
+  tick_timer_service_unsubscribe();
+
+  APP_LOG (APP_LOG_LEVEL_DEBUG, "updating tick timer service %02x %d", this->seconds_hand_mode, SHOW_SECONDS_HAND(this->seconds_hand_mode));
+  if (SHOW_SECONDS_HAND(this->seconds_hand_mode)) {
     tick_timer_service_subscribe(SECOND_UNIT, handle_tick);
   }
   else {
@@ -661,6 +688,111 @@ static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_fo
   text_layer_set_text_alignment(new_text_layer, GTextAlignmentCenter);
   return new_text_layer;
 }
+
+
+
+
+static void turn_off_seconds_after_timer(void* watch_window) {
+  WatchfaceWindow* this = (WatchfaceWindow*)watch_window;
+  
+  this->seconds_duration_timer = NULL;
+  if (this->seconds_hand_mode == SECONDS_HAND_FOR_FIXED_DURATION_ON) {
+    this->seconds_hand_mode = SECONDS_HAND_FOR_FIXED_DURATION_OFF;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "turning off seconds after timer %x", this->seconds_hand_mode);
+    
+    force_immediate_time_update(g_watchface_window, true, true, false);
+  } else {
+    APP_LOG(APP_LOG_LEVEL_ERROR, "received request to turn off seconds based on timer but currently in wrong mode %d", this->seconds_hand_mode);
+  }
+}
+
+
+
+static void register_seconds_duration_timer(Window* watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  int duration = this->seconds_hand_duration * 60000;
+  duration = duration / 10;
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "register a duration timer %d", duration);
+  
+  if (this->seconds_duration_timer)  { // if it already exists, reschedule it.
+      app_timer_reschedule(this->seconds_duration_timer, duration);  
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "reschedule a timer");
+  } else {
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "register an app timer");
+      this->seconds_duration_timer = app_timer_register(duration, turn_off_seconds_after_timer, this);
+  }
+}
+
+
+static void force_immediate_time_update(Window* watchface_window, bool bUpdateTime, bool bUpdateTickTimerService, bool bUpdateDurationTimer) {
+   
+  if (bUpdateTime) {
+    update_time(watchface_window, local_time_peek());
+  }
+  if (bUpdateTickTimerService) {
+    watchface_tick_timer_service_subscribe(watchface_window);
+  }
+  if (bUpdateDurationTimer) {
+    register_seconds_duration_timer(watchface_window);
+  }
+}
+
+
+static void tap_received(AccelAxisType axis, int32_t direction) {
+  // A tap event occured
+  WatchfaceWindow *this = window_get_user_data(g_watchface_window);
+  time_t now = time(NULL);
+  bool double_tap = false;
+  
+  bool bUpdateTime = false;
+  bool bUpdateTickTimerService = false;
+  bool bUpdateDurationTimer = false;
+  
+  APP_LOG(APP_LOG_LEVEL_ERROR, "received tap");
+  double_tap = (now - this->most_recent_tap < 2);
+  this->most_recent_tap = now;
+  // ignore double, triple taps, based on if time is less than a second apart
+  if (double_tap) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "ignored tap");
+  } else {
+  
+    switch (this->seconds_hand_mode) {
+      case SECONDS_HAND_FOR_FIXED_DURATION_OFF:  // not already showing... start showing for fixed duration
+        this->seconds_hand_mode = SECONDS_HAND_FOR_FIXED_DURATION_ON;
+        bUpdateTime = true;
+        bUpdateTickTimerService = true;
+        bUpdateDurationTimer = true;
+      break;
+      case SECONDS_HAND_FOR_FIXED_DURATION_ON:  // already showing for fixed duration... Restart the timer
+        bUpdateDurationTimer = true;
+      break;
+      case SECONDS_HAND_TOGGLE_TAP_OFF:        // currently not showing seconds hand.  Start showing it.
+        this->seconds_hand_mode = SECONDS_HAND_TOGGLE_TAP_ON;
+        bUpdateTime = true;
+        bUpdateTickTimerService = true;
+      break;
+      case SECONDS_HAND_TOGGLE_TAP_ON:        // currently showning seconds hand.  Stop showing it.
+        this->seconds_hand_mode = SECONDS_HAND_TOGGLE_TAP_OFF;
+        bUpdateTime = true;
+        bUpdateTickTimerService = true;
+      break;
+      default:
+        APP_LOG(APP_LOG_LEVEL_ERROR, "received tap when state does not expect one.  Current mode = %02x", this->seconds_hand_mode);
+      break;
+    }
+    
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "tap received - new  hand mode change %x", this->seconds_hand_mode);
+    force_immediate_time_update(g_watchface_window, bUpdateTime, bUpdateTickTimerService, bUpdateDurationTimer);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "tap received after force immediat - new  hand mode change %x", this->seconds_hand_mode);
+  }
+  
+}
+
+
+static void tap_service_subscribe(WatchfaceWindow* this) {
+    accel_tap_service_subscribe(tap_received);
+}
+
 
 static void watchface_window_load(Window *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
@@ -710,7 +842,13 @@ static void watchface_window_load(Window *watchface_window) {
   this->second_hand_layer = layer_create(bounds);
   layer_set_update_proc(this->second_hand_layer, update_seconds);
   layer_add_child(root_layer, this->second_hand_layer);
+  
+  if (TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
+    tap_service_subscribe(this);
+  }
 }
+  
+
 
 static void watchface_window_appear(Window *watchface_window) {
   update_time(watchface_window, local_time_peek());
@@ -723,14 +861,24 @@ static void watchface_window_appear(Window *watchface_window) {
 }
 
 static void watchface_window_disappear(Window *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  
   bluetooth_connection_service_unsubscribe();
   battery_state_service_unsubscribe();
   tick_timer_service_unsubscribe();
+  if (TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
+    accel_tap_service_unsubscribe();
+  }
 }
 
 static void watchface_window_unload(Window *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
+  if (this->seconds_duration_timer) {
+    app_timer_cancel(this->seconds_duration_timer);
+    this->seconds_duration_timer = NULL;
+  }
+  
   if (this->weather_update_timer) {
     app_timer_cancel(this->weather_update_timer);
     this->weather_update_timer = NULL;
@@ -809,15 +957,34 @@ static void weather_received(void *watchface_window, Message const *message) {
   }
 }
 
+
+
 static void settings_received(void *watchface_window, Message const *message) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
+  
+  bool bUpdateTime = false;
+  bool bUpdateTickTimer = true;
+  bool bUpdateTapSensor = true;
+  
   APP_LOG(APP_LOG_LEVEL_DEBUG, "settings received");
   
-  if (this->show_seconds_hand != message->show_seconds_hand) {
-    this->show_seconds_hand = message->show_seconds_hand;
-    persist_write_bool(MESSAGE_KEY_SHOW_SECONDS_HAND, this->show_seconds_hand);
-    update_time(watchface_window, local_time_peek());
-    watchface_tick_timer_service_subscribe(watchface_window);
+  
+  if (this->seconds_hand_duration != message->seconds_hand_duration) {
+    this->seconds_hand_duration = message->seconds_hand_duration;
+    persist_write_int(MESSAGE_KEY_SECONDS_HAND_DURATION, this->seconds_hand_duration);
+  }
+
+  if (this->seconds_hand_mode != message->seconds_hand_mode) {
+    bUpdateTime = true;
+    bUpdateTickTimer =  (SHOW_SECONDS_HAND(message->seconds_hand_mode) != SHOW_SECONDS_HAND(this->seconds_hand_mode));
+    if (TAP_SENSOR_NEEDED(message->seconds_hand_mode) != TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
+      bUpdateTapSensor = true;
+      if (TAP_SENSOR_NEEDED(message->seconds_hand_mode))  // if it used to need the tap sensor, but no longer does, then unsubscribe
+          accel_tap_service_unsubscribe();
+    }
+    this->seconds_hand_mode = message->seconds_hand_mode;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "settings set hand mode change %x", this->seconds_hand_mode);
+    persist_write_int(MESSAGE_KEY_SHOW_SECONDS_HAND, this->seconds_hand_mode);
   }
 
   if (this->temperature_units != message->temperature_units) {
@@ -839,10 +1006,9 @@ static void settings_received(void *watchface_window, Message const *message) {
   }
 
   if (this->hand_style != message->hand_style) {
-
     this->hand_style = message->hand_style;
     persist_write_int(MESSAGE_KEY_HAND_STYLE, this->hand_style);
-    update_time(watchface_window, local_time_peek());
+    bUpdateTime = true;
   }
   
   if (this->temperature_font_size != message->temperature_font_size) {
@@ -896,6 +1062,13 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_int(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP, this->weather_quiet_time_stop);
   }
   
+  force_immediate_time_update(watchface_window, bUpdateTime, bUpdateTickTimer, false);
+  
+  if (bUpdateTapSensor && TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
+    tap_service_subscribe(this);
+  }
+ 
+  
   
   APP_LOG(APP_LOG_LEVEL_DEBUG, "exiting settings received");
   
@@ -934,7 +1107,14 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.is_daylight = tuple->value->int32;
         break;
       case MESSAGE_KEY_SHOW_SECONDS_HAND:
-        message.show_seconds_hand = tuple->value->int32;
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "got seconds hand mode change %s", tuple->value->cstring);
+        message.seconds_hand_mode = atoi(tuple->value->cstring);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "got seconds hand mode change %x", message.seconds_hand_mode);
+      
+        set_clay_message(&message);
+        break;
+     case MESSAGE_KEY_SECONDS_HAND_DURATION:
+        message.seconds_hand_duration = tuple->value->int32;
         set_clay_message(&message);
         break;
       case MESSAGE_KEY_TEMPERATURE_UNITS:
@@ -1013,7 +1193,11 @@ Window *watchface_window_create() {
   WatchfaceWindow *this = malloc(sizeof(*this));
   *this = (__typeof(*this)) {
     // IMPORTANT: Keep default values in sync with watchface_window.js.
-    .show_seconds_hand = persist_read_bool_or_default(MESSAGE_KEY_SHOW_SECONDS_HAND, false),
+    .seconds_hand_mode = persist_read_int_or_default(MESSAGE_KEY_SHOW_SECONDS_HAND, SECONDS_HAND_OFF),
+    .seconds_hand_duration = persist_read_int_or_default(MESSAGE_KEY_SECONDS_HAND_DURATION, 2 ),
+    .seconds_duration_timer = NULL,
+    .most_recent_tap = 0,
+    
     .temperature_units = persist_read_int_or_default(MESSAGE_KEY_TEMPERATURE_UNITS, TEMPERATURE_UNITS_FAHRENHEIT),
     .vibrate_on_bluetooth_disconnect = persist_read_bool_or_default(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, true),
     .show_battery_at_percent = persist_read_int_or_default(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, 40),

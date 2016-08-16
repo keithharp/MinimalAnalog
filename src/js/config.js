@@ -28,11 +28,38 @@ module.exports = [
         ]
       },
       {
-        "type": "toggle",
+        "type": "radiogroup",
         "messageKey": "SHOW_SECONDS_HAND",
-        "label": "Enable Seconds",
-        "defaultValue": false
-      }
+        "label": "When to Show Seconds Hand",
+        "defaultValue": "0x00",
+        "options": [
+          {
+            "label" : "Never",
+            "value" : "0"
+          },
+          {
+            "label" : "Always",
+            "value" : "8"
+          },
+          {
+            "label" : "Toggle On/Off When Tapped",
+            "value" : "6"
+          },
+          {
+            "label" : "Turn On Temporarily When Tapped",
+            "value" : "5"
+          },
+
+        ]
+      },
+        {
+        "type": "slider",
+        "messageKey": "SECONDS_HAND_DURATION",
+        "defaultValue": 2,
+        "label": "How many minutes to keep showing seconds after tapping",
+        "min": 1,
+        "max": 60
+        }
       ]
    },
   {
