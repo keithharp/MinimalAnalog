@@ -869,6 +869,7 @@ static void tap_received(AccelAxisType axis, int32_t direction) {
   
   double_tap = (now - this->most_recent_tap < 2);
   this->most_recent_tap = now;
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "tap %d %lx", axis, direction);
   // ignore double, triple taps, based on if time is less than a second apart
   if (double_tap) {
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "ignored tap");
