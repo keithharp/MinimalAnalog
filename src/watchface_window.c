@@ -1,6 +1,12 @@
 /*
  * Minimal Analog 2 - A watchface for Pebble, Pebble Time, and Pebble Round
  *
+ *  Note that according to https://forums.pebble.com/t/how-to-recover-from-app-msg-busy-after-bluetooth-reconnects/22948
+ *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
+ *   workaround is to go into an app and come back to the watchface.
+ *
+ * Version 1.3 adds  (NOT YET DELIVERED)
+ *   - provide a workaround for a pebble bug that hoses communication after a bluetooth reconnect.  Restart the watchface if this error occurs. --DONE
  *
  * Version 1.2 adds
  *   - user options to turn on second hand for a defined period or until tapped again by tapping. - DONE
@@ -432,12 +438,82 @@ static void update_condition(Window *watchface_window, int condition_code, bool 
   text_layer_set_text_color(this->condition_text_layer, this->color_foreground_1);
 }
 
+
+  
+static void log_reason(char* info, AppMessageResult reason) {
+  char reason_string[1000];
+  reason_string[0] = 0;
+  if (reason == APP_MSG_OK) {
+    strcat(reason_string, "OK");
+  } else {
+    if (reason & APP_MSG_OK) {
+      strcat(reason_string, "OK.");
+    }
+    if (reason & APP_MSG_SEND_TIMEOUT) {
+      strcat(reason_string, "Send Timeout.");
+    }
+    if (reason & APP_MSG_SEND_REJECTED) {
+      strcat(reason_string, "Rejected.");
+    }
+    if (reason & APP_MSG_NOT_CONNECTED) {
+      strcat(reason_string, "Not Connected.");
+    }
+    if (reason & APP_MSG_APP_NOT_RUNNING) {
+      strcat(reason_string, "App Not Running.");
+    }
+    if (reason & APP_MSG_INVALID_ARGS) {
+      strcat(reason_string, "Invalid Args.");
+    }
+    if (reason & APP_MSG_BUSY) {
+      strcat(reason_string, "Busy.");
+    }
+    if (reason & APP_MSG_BUFFER_OVERFLOW) {
+      strcat(reason_string, "Buffer Overflow.");
+    }
+    if (reason & APP_MSG_ALREADY_RELEASED) {
+      strcat(reason_string, "Already Released.");
+    } 
+    if (reason & APP_MSG_OUT_OF_MEMORY) {
+      strcat(reason_string, "Out of Memory.");
+    }
+    if (reason & APP_MSG_INTERNAL_ERROR) {
+      strcat(reason_string, "Internal Error.");
+    } 
+  }
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %x %s", info, reason, reason_string); 
+}
+
+static void cancel_weather_update_timer(WatchfaceWindow* this) {
+  
+   // In case there is already a timer, turn it off
+  if (this->weather_update_timer) {
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "getting ready to close weather_timer");
+    app_timer_cancel(this->weather_update_timer);
+    this->weather_update_timer = NULL;
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "done with resetting timer");
+  }
+}
+
+
+// Drastic measures...  If we get stuck to where we can no longer get messages, then restart the watchface
+static void restart_watchface(void* watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+ 
+  strncpy(this->bluetooth_text, "h", sizeof(this->bluetooth_text));
+  APP_LOG(APP_LOG_LEVEL_ERROR, "restarting watchface to recover from Pebble communications bug");
+  window_stack_pop_all(false);
+}
+
+
 static void send_weather_request(void *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+  int result = 0;
+    
   if (!this->bluetooth_connected)
     return; // short circuit and stop looking for weather if bluetooth is currently disconnected
 
+  // Set up a timer in case we do not get an update
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "About to set weather update timer");
   this->weather_update_timer = app_timer_register(this->weather_update_backoff_interval, send_weather_request, watchface_window);
   this->weather_update_backoff_interval *= 2;
   if (this->weather_update_backoff_interval > MAX_WEATHER_UPDATE_INTERVAL_MS) {
@@ -445,14 +521,21 @@ static void send_weather_request(void *watchface_window) {
   }
 
   DictionaryIterator *iterator;
-  app_message_outbox_begin(&iterator);
-  dict_write_int32(iterator, KEY_MESSAGE_TYPE, MESSAGE_TYPE_WEATHER);
-  dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i", this->temperature_units);
-  dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
-  app_message_outbox_send();
-  
+  if ((result = app_message_outbox_begin(&iterator)) != APP_MSG_OK) {
+    log_reason("unable to begin outbox", result); 
+    //  There is a bug documented in  https://forums.pebble.com/t/how-to-recover-from-app-msg-busy-after-bluetooth-reconnects/22948 
+    //    where we get a BUSY that we never recover from after bluetooth reconnect.   So, let's reboot the app to recover.
+    if (result == APP_MSG_BUSY) restart_watchface(watchface_window);
+  }  else {
+    dict_write_int32(iterator, KEY_MESSAGE_TYPE, MESSAGE_TYPE_WEATHER);
+    dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i", this->temperature_units);
+    dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
+    if ((result = app_message_outbox_send()) != APP_MSG_OK) 
+      log_reason("unable to send outbox", result);
+  }    
   mark_as_syncing(watchface_window, true);
+
 }
 
 static void update_battery_state(Layer *layer, GContext *ctx) {
@@ -480,6 +563,16 @@ static void update_battery_state(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, GRect(2, 2, (battery_state.charge_percent / 10), 4), 0, GCornerNone);
 }
 
+
+static void do_async_weather_update(Window* watchface_window) {
+   WatchfaceWindow *this = window_get_user_data(watchface_window);
+  
+   cancel_weather_update_timer(this);
+   this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
+   send_weather_request(watchface_window);  
+}
+
+
 static void update_bluetooth(Window *watchface_window, bool bluetooth_connected) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
@@ -492,8 +585,9 @@ static void update_bluetooth(Window *watchface_window, bool bluetooth_connected)
   
   text_layer_set_text(this->bluetooth_text_layer, this->bluetooth_text);
   
-  if (bluetooth_connected) // if we just got reconnected, then update the weather
-    send_weather_request(watchface_window);
+  if (bluetooth_connected)  {// if we just got reconnected, then update the weather
+    do_async_weather_update(watchface_window);
+  }
 }
 
 static void update_hands(Layer *layer, GContext *ctx) {
@@ -640,8 +734,17 @@ static void update_time(Window *watchface_window, struct tm *local_time) {
         update_date(watchface_window);
     }
 
+#if 0
+    // this is for testing updates... comment out for actual releases  ... provides update every 5 minutes
+   APP_LOG(APP_LOG_LEVEL_DEBUG, "countdown to weather update %d", local_time->tm_min % 5);
+
+   if ((local_time->tm_min % 5 == 0) && !inQuietTime(this, local_time->tm_hour)) { // Top and bottom of hour
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "doing call for weather in debug mode");
+#else
     if ((local_time->tm_min == 30 || local_time->tm_min == 0) && !inQuietTime(this, local_time->tm_hour)) { // Top and bottom of hour
-        send_weather_request(watchface_window);
+#endif
+      do_async_weather_update(watchface_window);
+
     }
   }
 }
@@ -670,7 +773,7 @@ static void watchface_tick_timer_service_subscribe(Window *watchface_window) {
 
   tick_timer_service_unsubscribe();
 
-  APP_LOG (APP_LOG_LEVEL_DEBUG, "updating tick timer service %02x %d", this->seconds_hand_mode, SHOW_SECONDS_HAND(this->seconds_hand_mode));
+  //APP_LOG (APP_LOG_LEVEL_DEBUG, "updating tick timer service %02x %d", this->seconds_hand_mode, SHOW_SECONDS_HAND(this->seconds_hand_mode));
   if (SHOW_SECONDS_HAND(this->seconds_hand_mode)) {
     tick_timer_service_subscribe(SECOND_UNIT, handle_tick);
   }
@@ -693,7 +796,7 @@ GFont get_weather_font(WatchfaceWindow *this) {
       return this->font_temperature_small;
     break;
     default: // no font picked.  Default to medium font, but log an error first
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "trying to set weather font, but value out of range %d", this->temperature_font_size);      
+      APP_LOG(APP_LOG_LEVEL_ERROR, "trying to set weather font, but value out of range %d", this->temperature_font_size);      
     case 2: // medium font  (which is the same font used for date)
        return this->font_date;
     break;
@@ -866,6 +969,9 @@ static void watchface_window_load(Window *watchface_window) {
 
 
 static void watchface_window_appear(Window *watchface_window) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "in Watchface_window_appear %d", this->weather_update_timer == NULL);
   update_time(watchface_window, local_time_peek());
   watchface_tick_timer_service_subscribe(watchface_window);
 
@@ -894,10 +1000,7 @@ static void watchface_window_unload(Window *watchface_window) {
     this->seconds_duration_timer = NULL;
   }
   
-  if (this->weather_update_timer) {
-    app_timer_cancel(this->weather_update_timer);
-    this->weather_update_timer = NULL;
-  }
+  cancel_weather_update_timer(this);
 
   gpath_destroy(this->hour_hand_path);
   gpath_destroy(this->minute_hand_path);
@@ -954,8 +1057,8 @@ static void watchface_window_unload(Window *watchface_window) {
 static void ready_received(void *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
-  this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
-  send_weather_request(watchface_window);
+  do_async_weather_update(watchface_window);
+
   update_date(watchface_window);
 }
 
@@ -963,9 +1066,7 @@ static void weather_received(void *watchface_window, Message const *message) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
   if (message->message_id == this->expected_weather_message_id) {
-    if (this->weather_update_timer) {
-      app_timer_cancel(this->weather_update_timer);
-    }
+    cancel_weather_update_timer(this);
 
     update_condition(watchface_window, message->condition_code, message->is_daylight);
     update_temperature(watchface_window, message->temperature);
@@ -1001,8 +1102,8 @@ static void settings_received(void *watchface_window, Message const *message) {
   if (this->temperature_units != message->temperature_units) {
     this->temperature_units = message->temperature_units;
     persist_write_int(MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
-    this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
-    send_weather_request(watchface_window);
+    do_async_weather_update(watchface_window);
+
   }
 
   if (this->vibrate_on_bluetooth_disconnect != message->vibrate_on_bluetooth_disconnect) {
@@ -1041,8 +1142,8 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_int(MESSAGE_KEY_FG1_COLOR, this->fg1_color);
     this->color_foreground_1 = GColorFromHEX(message->fg1_color);
     layer_mark_dirty(this->background_layer);
-    this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
-    send_weather_request(watchface_window);
+    do_async_weather_update(watchface_window);
+
     update_date(watchface_window);
   }
   
@@ -1088,6 +1189,19 @@ static void set_clay_message(Message *message)
 {
   message->message_type = MESSAGE_TYPE_SETTINGS;  
 }
+
+  
+static void outbox_sent(DictionaryIterator *iterator, void *context) {
+  //APP_LOG(APP_LOG_LEVEL_DEBUG, "outbox sent");
+}
+
+
+
+
+static void outbox_failed(DictionaryIterator *iterator, AppMessageResult reason, void *context) {
+  log_reason("outbox failed to send", reason);
+}
+
 
 static void inbox_received(DictionaryIterator *iterator, void *watchface_window) {
   Message message;
@@ -1258,8 +1372,10 @@ Window *watchface_window_create() {
 
   app_message_set_context(watchface_window);
   app_message_register_inbox_received(inbox_received);
+  app_message_register_outbox_sent(outbox_sent);
+  app_message_register_outbox_failed(outbox_failed);
  //app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
-  app_message_open(1000,1000);
+   app_message_open(1000,1000);
 
   g_watchface_window = watchface_window;
   return watchface_window;
