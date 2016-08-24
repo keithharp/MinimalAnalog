@@ -5,6 +5,10 @@
  *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
  *   workaround is to go into an app and come back to the watchface.
  *
+ *
+ * Version 1.5 adds
+ *   - code cleanup on font to weather condition mapping to make it easier to read
+ *
  * Version 1.4 adds
  *   - provide ability to choose OpenWeatherMap or Yahoo  (yahoo had stopped working for me)
  *
@@ -193,9 +197,52 @@ typedef struct {
 #define CONDITION_CODE_ISOLATED_THUNDERSHOWERS 47
 
 // OpenWeatherMap condition codes:  http://openweathermap.org/weather-conditions
+#define OWM_CONDITION_CODE_THUNDERSTORM_MIN 200
+#define OWM_CONDITION_CODE_THUNDERSTORM_MAX 299
+#define OWM_CONDITION_CODE_RAIN_MIN 300
+#define OWM_CONDITION_CODE_RAIN_MAX 599
+#define OWM_CONDITION_CODE_SNOW_MIN 600
+#define OWM_CONDITION_CODE_LIGHT_RAIN_AND_SNOW 615
+#define OWM_CONDITION_CODE_RAIN_AND_SNOW 616
+#define OWM_CONDITION_CODE_SNOW_MAX 699
+#define OWM_CONDITION_CODE_ATMOSPHERE_MIN 700
+#define OWM_CONDITION_CODE_ATMOSPHERE_MAX 799
+#define OWM_CONDITION_CODE_CLEAR 800
+#define OWM_CONDITION_CODE_PARTLY_CLOUDY_MIN 801
+#define OWM_CONDITION_CODE_PARTLY_CLOUDY_MAX 803
+#define OWM_CONDITION_CODE_OVERCAST_CLOUDS 804
+#define OWM_CONDITION_CODE_TORNADO 900
+#define OWM_CONDITION_CODE_TROPICAL_STORM 901
+#define OWM_CONDITION_CODE_HURRICANE 902
+#define OWM_CONDITION_CODE_COLD 903
+#define OWM_CONDITION_CODE_HOT 904
+#define OWM_CONDITION_CODE_WINDY 905
+#define OWM_CONDITION_CODE_HAIL 906
 
-
-
+// Symbols available in the myicons-webfont.ttf
+#define ICON_REFRESH "f"
+#define ICON_TORNADO "A"
+#define ICON_HURRICANE "B"
+#define ICON_THUNDERSTORM "C"
+#define ICON_FREEZING_RAIN "D"
+#define ICON_RAIN "E"
+#define ICON_SNOW "F"
+#define ICON_FOG "G"
+#define ICON_WINDY "H"
+#define ICON_COLD "I"
+#define ICON_CLOUDY "J"
+#define ICON_PARTLY_CLOUDY_DAY "L"
+#define ICON_PARTLY_CLOUDY_NIGHT "K"
+#define ICON_CLEAR_DAY "N"
+#define ICON_CLEAR_NIGHT "M"
+#define ICON_HOT "O"
+#define ICON_UNKNOWN "d"
+#define ICON_NONE ""
+#define ICON_RESTART "h"
+#define ICON_CHARGING "s"
+#define ICON_PLUGGED "t"
+#define ICON_BLUETOOTH_DISCONNECT "b"
+ 
 int const MIN_WEATHER_UPDATE_INTERVAL_MS = 10 * 1000;
 int const MAX_WEATHER_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -343,17 +390,19 @@ static void update_temperature(Window *watchface_window, int temperature) {
 static void condition_code_to_icon_yahoo(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
+  char* icon = NULL;
+  
   // Set symbol using icon font
   switch (condition_code) {
     case CONDITION_CODE_REFRESH:
-      strncpy(this->condition_text, "f", sizeof(this->condition_text));
+      icon = ICON_REFRESH;
       break;
     case CONDITION_CODE_TORNADO:
-      strncpy(this->condition_text, "A", sizeof(this->condition_text));
+      icon = ICON_TORNADO;
       break;
     case CONDITION_CODE_TROPICAL_STORM:
     case CONDITION_CODE_HURRICANE:
-      strncpy(this->condition_text, "B", sizeof(this->condition_text));
+      icon = ICON_HURRICANE;
       break;
     case CONDITION_CODE_THUNDERSTORMS:
     case CONDITION_CODE_SEVERE_THUNDERSTORMS:
@@ -362,7 +411,7 @@ static void condition_code_to_icon_yahoo(Window *watchface_window, int condition
     case CONDITION_CODE_SCATTERED_THUNDERSTORMS_ALIAS:
     case CONDITION_CODE_THUNDERSHOWERS:
     case CONDITION_CODE_ISOLATED_THUNDERSHOWERS:
-      strncpy(this->condition_text, "C", sizeof(this->condition_text));
+      icon = ICON_THUNDERSTORM;
       break;
     case CONDITION_CODE_FREEZING_RAIN:
     case CONDITION_CODE_FREEZING_DRIZZLE:
@@ -370,14 +419,14 @@ static void condition_code_to_icon_yahoo(Window *watchface_window, int condition
     case CONDITION_CODE_MIXED_RAIN_AND_SLEET:
     case CONDITION_CODE_HAIL:
     case CONDITION_CODE_SLEET:
-      strncpy(this->condition_text, "D", sizeof(this->condition_text));
+      icon = ICON_FREEZING_RAIN;
       break;
     case CONDITION_CODE_SHOWERS:
     case CONDITION_CODE_SHOWERS_ALIAS:
     case CONDITION_CODE_SCATTERED_SHOWERS:
     case CONDITION_CODE_DRIZZLE:
     case CONDITION_CODE_MIXED_RAIN_AND_HAIL:
-      strncpy(this->condition_text, "E", sizeof(this->condition_text));
+      icon = ICON_RAIN;
       break;
     case CONDITION_CODE_SNOW:
     case CONDITION_CODE_SNOW_FLURRIES:
@@ -388,106 +437,109 @@ static void condition_code_to_icon_yahoo(Window *watchface_window, int condition
     case CONDITION_CODE_SCATTERED_SNOW_SHOWERS:
     case CONDITION_CODE_HEAVY_SNOW_ALIAS:
     case CONDITION_CODE_SNOW_SHOWERS:
-      strncpy(this->condition_text, "F", sizeof(this->condition_text));
+      icon = ICON_SNOW;
       break;
     case CONDITION_CODE_DUST:
     case CONDITION_CODE_FOGGY:
     case CONDITION_CODE_HAZE:
     case CONDITION_CODE_SMOKY:
-      strncpy(this->condition_text, "G", sizeof(this->condition_text));
+      icon = ICON_FOG;
       break;
     case CONDITION_CODE_BLUSTERY:
     case CONDITION_CODE_WINDY:
-      strncpy(this->condition_text, "H", sizeof(this->condition_text));
+      icon = ICON_WINDY;
       break;
     case CONDITION_CODE_COLD:
-      strncpy(this->condition_text, "I", sizeof(this->condition_text));
+      icon = ICON_COLD;
       break;
     case CONDITION_CODE_CLOUDY:
     case CONDITION_CODE_MOSTLY_CLOUDY_DAY:
     case CONDITION_CODE_MOSTLY_CLOUDY_NIGHT:
-      strncpy(this->condition_text, "J", sizeof(this->condition_text));
+      icon = ICON_CLOUDY;
       break;
     case CONDITION_CODE_PARTLY_CLOUDY:
     case CONDITION_CODE_PARTLY_CLOUDY_DAY:
     case CONDITION_CODE_PARTLY_CLOUDY_NIGHT:
-      strncpy(this->condition_text, (is_daylight ? "L" : "K"), sizeof(this->condition_text));
+      icon = (is_daylight ? ICON_PARTLY_CLOUDY_DAY : ICON_PARTLY_CLOUDY_NIGHT);
       break;
     case CONDITION_CODE_SUNNY:
     case CONDITION_CODE_FAIR_DAY:
     case CONDITION_CODE_CLEAR_NIGHT:
     case CONDITION_CODE_FAIR_NIGHT:
-      strncpy(this->condition_text, (is_daylight ? "N" : "M"), sizeof(this->condition_text));
+      icon = (is_daylight ? ICON_CLEAR_DAY : ICON_CLEAR_NIGHT );
       break;
     case CONDITION_CODE_HOT:
-      strncpy(this->condition_text, "O", sizeof(this->condition_text));
+      icon = ICON_HOT;
       break;
     default:
-      strncpy(this->condition_text, "d", sizeof(this->condition_text));
+      icon = ICON_UNKNOWN;
       break;
   }
-}
+  strncpy(this->condition_text, icon, sizeof(this->condition_text));
 
+}
+ 
 
 // OpenWeatherMap condition codes:  http://openweathermap.org/weather-conditions
 
 static void condition_code_to_icon_openweathermap(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   
+  char* icon = NULL;
   APP_LOG(APP_LOG_LEVEL_DEBUG, "condition code = %d %d", condition_code, is_daylight);
   
-  if (condition_code >= 200 && condition_code <= 299) // thunderstorms
-    strncpy(this->condition_text, "C", sizeof(this->condition_text));
-  else if (condition_code >= 300 && condition_code <= 599) // rain or drizzle
-    strncpy(this->condition_text, "E", sizeof(this->condition_text));
-  else if (condition_code >= 600 && condition_code <= 699) // snow
-    if (condition_code == 615 || condition_code == 616) // mixed snow and rain
-      strncpy(this->condition_text, "D", sizeof(this->condition_text));
+  if (condition_code >= OWM_CONDITION_CODE_THUNDERSTORM_MIN && condition_code <= OWM_CONDITION_CODE_THUNDERSTORM_MAX) // thunderstorms
+    icon = ICON_THUNDERSTORM;
+  else if (condition_code >= OWM_CONDITION_CODE_RAIN_MIN && condition_code <= OWM_CONDITION_CODE_RAIN_MAX) // rain or drizzle
+    icon = ICON_RAIN;
+  else if (condition_code >= OWM_CONDITION_CODE_SNOW_MIN && condition_code <= OWM_CONDITION_CODE_SNOW_MAX) // snow
+    if (condition_code == OWM_CONDITION_CODE_LIGHT_RAIN_AND_SNOW || condition_code == OWM_CONDITION_CODE_RAIN_AND_SNOW) // mixed snow and rain
+      icon = ICON_FREEZING_RAIN;
     else
-      strncpy(this->condition_text, "F", sizeof(this->condition_text));
-  else if (condition_code >= 700 && condition_code <= 799) // mist/snoke/haze, etc...
-    strncpy(this->condition_text, "G", sizeof(this->condition_text));
-  else if (condition_code == 800) // clear
-    strncpy(this->condition_text, (is_daylight ? "N" : "M"), sizeof(this->condition_text));
-  else if (condition_code >= 801 && condition_code <= 803) // partly cloudy
-    strncpy(this->condition_text, (is_daylight ? "L" : "K"), sizeof(this->condition_text));
-    else {
-
-    switch (condition_code) {
-      case CONDITION_CODE_REFRESH:
-        strncpy(this->condition_text, "f", sizeof(this->condition_text));
-        break;
-      case 804: // overcast clouds
-        strncpy(this->condition_text, "J", sizeof(this->condition_text));
-        break;
-     
-      case 900:  // tornado
-        strncpy(this->condition_text, "A", sizeof(this->condition_text));
-        break;
-      case 901:  // tropical storm
-      case 902:  // hurricane
-        strncpy(this->condition_text, "B", sizeof(this->condition_text));
-        break;
-      case 903: // cold
-        strncpy(this->condition_text, "I", sizeof(this->condition_text));
-        break;
+      icon = ICON_SNOW;
+  else if (condition_code >= OWM_CONDITION_CODE_ATMOSPHERE_MIN && condition_code <= OWM_CONDITION_CODE_ATMOSPHERE_MAX) // mist/snoke/haze, etc...
+    icon = ICON_FOG;
+  else if (condition_code >= OWM_CONDITION_CODE_PARTLY_CLOUDY_MIN && condition_code <= OWM_CONDITION_CODE_PARTLY_CLOUDY_MAX) // partly cloudy
+    icon = (is_daylight ? ICON_PARTLY_CLOUDY_DAY : ICON_PARTLY_CLOUDY_NIGHT);
+  else {
  
-      case 904: // hot
-        strncpy(this->condition_text, "O", sizeof(this->condition_text));
-        break;
- 
-      case 905:  // windy
-        strncpy(this->condition_text, "H", sizeof(this->condition_text));
-        break;
-      case 907: // hail
-        strncpy(this->condition_text, "D", sizeof(this->condition_text));
-        break;
- 
-      default:
-        strncpy(this->condition_text, "d", sizeof(this->condition_text));
-        break;
-    }
+      switch (condition_code) {
+        case CONDITION_CODE_REFRESH:
+          icon = ICON_REFRESH;
+          break;
+        case OWM_CONDITION_CODE_CLEAR: 
+          icon = (is_daylight ? ICON_CLEAR_DAY : ICON_CLEAR_NIGHT);
+          break;      
+        case OWM_CONDITION_CODE_OVERCAST_CLOUDS: 
+          icon = ICON_CLOUDY;
+          break; 
+        case OWM_CONDITION_CODE_TORNADO: 
+          icon = ICON_TORNADO;
+          break;
+        case OWM_CONDITION_CODE_TROPICAL_STORM: 
+        case OWM_CONDITION_CODE_HURRICANE:  
+          icon = ICON_HURRICANE;
+          break;
+        case OWM_CONDITION_CODE_COLD: 
+          icon = ICON_COLD;
+          break; 
+        case OWM_CONDITION_CODE_HOT:
+          icon = ICON_HOT;
+          break; 
+        case OWM_CONDITION_CODE_WINDY:  
+          icon = ICON_WINDY;
+          break;
+        case OWM_CONDITION_CODE_HAIL: 
+          icon = ICON_FREEZING_RAIN;
+          break;
+   
+        default:
+          icon = ICON_UNKNOWN;
+          break;
+      }
   }
+  strncpy(this->condition_text, icon, sizeof(this->condition_text));
+
 }
 
 
@@ -509,13 +561,11 @@ static void mark_as_syncing(Window* watchface_window, bool syncing) {
   update_temperature(watchface_window, INT_MIN);  
 #else
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  if (syncing) {
-    strncpy(this->bluetooth_text, "f", sizeof(this->bluetooth_text));
-  } else {
-    strncpy(this->bluetooth_text, "", sizeof(this->bluetooth_text));
-  }
+
+  strncpy(this->bluetooth_text, syncing ? ICON_REFRESH : ICON_NONE , sizeof(this->bluetooth_text));
 #endif
 }
+
 static void update_condition(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   
@@ -586,7 +636,7 @@ static void cancel_weather_update_timer(WatchfaceWindow* this) {
 static void restart_watchface(void* watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
  
-  strncpy(this->bluetooth_text, "h", sizeof(this->bluetooth_text));
+  strncpy(this->bluetooth_text, ICON_RESTART, sizeof(this->bluetooth_text));
   APP_LOG(APP_LOG_LEVEL_ERROR, "restarting watchface to recover from Pebble communications bug");
   window_stack_pop_all(false);
 }
@@ -630,14 +680,16 @@ static void update_battery_state(Layer *layer, GContext *ctx) {
   WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
 
   BatteryChargeState battery_state = battery_state_service_peek();
-
+  char* icon = NULL;
+  
   if (battery_state.is_charging) { // Set symbol using icon font
-    strncpy(this->battery_text, "s", sizeof(this->battery_text));
+    icon = ICON_CHARGING;
   } else if (battery_state.is_plugged) {
-    strncpy(this->battery_text, "t", sizeof(this->battery_text));
+    icon = ICON_PLUGGED;
   } else {
-    strncpy(this->battery_text, "", sizeof(this->battery_text));
+    icon = ICON_NONE;
   }
+  strncpy(this->battery_text, icon, sizeof(this->battery_text));
 
   text_layer_set_text(this->battery_text_layer, this->battery_text);
 
@@ -664,11 +716,8 @@ static void do_async_weather_update(Window* watchface_window) {
 static void update_bluetooth(Window *watchface_window, bool bluetooth_connected) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
-  if (!bluetooth_connected) {
-    strncpy(this->bluetooth_text, "b", sizeof(this->bluetooth_text));
-  } else {
-    strncpy(this->bluetooth_text, "", sizeof(this->bluetooth_text));
-  }
+  strncpy(this->bluetooth_text, (bluetooth_connected ? ICON_NONE : ICON_BLUETOOTH_DISCONNECT), sizeof(this->bluetooth_text));
+ 
   this->bluetooth_connected = bluetooth_connected;
   
   text_layer_set_text(this->bluetooth_text_layer, this->bluetooth_text);
