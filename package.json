@@ -31,7 +31,8 @@
             "VIBRATE_ON_BLUETOOTH_DISCONNECT": 7,
             "WEATHER_QUIET_TIME": 15,
             "WEATHER_QUIET_TIME_START": 16,
-            "WEATHER_QUIET_TIME_STOP": 17
+            "WEATHER_QUIET_TIME_STOP": 17,
+            "WEATHER_SOURCE": 19
         },
         "projectType": "native",
         "resources": {
@@ -92,5 +93,5 @@
             "watchface": true
         }
     },
-    "version": "1.3.0"
+    "version": "1.4.0"
 }

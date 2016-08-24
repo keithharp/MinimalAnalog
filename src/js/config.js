@@ -52,7 +52,7 @@ module.exports = [
 
         ]
       },
-        {
+      {
         "type": "slider",
         "messageKey": "SECONDS_HAND_DURATION",
         "defaultValue": 2,
@@ -61,63 +61,88 @@ module.exports = [
         "max": 60
         }
       ]
-   },
-  {
-      "type": "section",
-      "items": [
-      {
-        "type": "heading",
-        "defaultValue": "More Settings"
+    },
+    { "type": "section",
+       "items": [
+         {
+           "type": "heading",
+           "defaultValue" : "Weather Settings"
+         },
+         {
+           "type": "radiogroup",
+           "messageKey": "TEMPERATURE_UNITS",
+           "label": "Temperature Units",
+           "defaultValue" : "1",
+           "options": [
+             { 
+               "label": "Fahrenheit", 
+               "value": "1"
+             },
+             { 
+               "label": "Celcius", 
+               "value": "0"
+             }
+           ]
+         },
+         {
+           "type": "radiogroup",
+           "messageKey": "TEMPERATURE_SIZE",
+           "label": "Temperature Font Size",
+           "defaultValue" : "2",
+           "options": [
+             { 
+               "label": "Small", 
+               "value": "1"
+             },
+             { 
+               "label": "Medium", 
+               "value": "2"
+             }
+           ]
+         },
+         {
+           "type": "radiogroup",
+           "messageKey": "WEATHER_SOURCE",
+           "label": "Weather Source",
+           "defaultValue" : "1",
+           "options": [
+             { 
+               "label": "OpenWeatherMap", 
+               "value": "1"
+             },
+             { 
+               "label": "Yahoo", 
+               "value": "2"
+             }
+           ]
+         },   
+       ]
       },
-
-       {
-        "type": "radiogroup",
-        "messageKey": "TEMPERATURE_UNITS",
-        "label": "Temperature Units",
-        "defaultValue" : "1",
-        "options": [
-          { 
-            "label": "Fahrenheit", 
-            "value": "1"
-          },
-          { 
-            "label": "Celcius", 
-            "value": "0"
-          }
-        ]
-      },
-     {
-        "type": "radiogroup",
-        "messageKey": "TEMPERATURE_SIZE",
-        "label": "Temperature Font Size",
-        "defaultValue" : "2",
-        "options": [
-          { 
-            "label": "Small", 
-            "value": "1"
-          },
-          { 
-            "label": "Medium", 
-            "value": "2"
-          }
-        ]
-      },
-
-      {
-        "type": "toggle",
-        "messageKey": "VIBRATE_ON_BLUETOOTH_DISCONNECT",
-        "label": "Alert for Bluetooth Disconnect",
-        "defaultValue": true
-      }, 
-      {
-        "type": "slider",
-        "messageKey": "SHOW_BATTERY_AT_PERCENT",
-        "label": "Low Battery Threshold",
-        "defaultValue": "40"
-      }
-
-    ]
-  },
+    {
+        "type": "section",
+        "items": [
+        {
+          "type": "heading",
+          "defaultValue": "More Settings"
+        },
+  
+   
+  
+        {
+          "type": "toggle",
+          "messageKey": "VIBRATE_ON_BLUETOOTH_DISCONNECT",
+          "label": "Alert for Bluetooth Disconnect",
+          "defaultValue": true
+        }, 
+        {
+          "type": "slider",
+          "messageKey": "SHOW_BATTERY_AT_PERCENT",
+          "label": "Low Battery Threshold",
+          "defaultValue": "40"
+        }
+  
+      ]
+    },
   {
     "type": "section",
     "items": [

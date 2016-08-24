@@ -5,7 +5,10 @@
  *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
  *   workaround is to go into an app and come back to the watchface.
  *
- * Version 1.3 adds  (NOT YET DELIVERED)
+ * Version 1.4 adds
+ *   - provide ability to choose OpenWeatherMap or Yahoo  (yahoo had stopped working for me)
+ *
+ * Version 1.3 adds
  *   - provide a workaround for a pebble bug that hoses communication after a bluetooth reconnect.  Restart the watchface if this error occurs. --DONE
  *
  * Version 1.2 adds
@@ -81,6 +84,7 @@ typedef struct {
       int weather_quiet_time_start;
       int weather_quiet_time_stop;
       int seconds_hand_duration;
+      int weather_source;
  
     };
   };
@@ -110,6 +114,7 @@ typedef struct {
 #define MESSAGE_KEY_WEATHER_QUIET_TIME_START 16
 #define MESSAGE_KEY_WEATHER_QUIET_TIME_STOP 17
 #define MESSAGE_KEY_SECONDS_HAND_DURATION 18
+#define MESSAGE_KEY_WEATHER_SOURCE 19
 
 // Message types.
 #define MESSAGE_TYPE_READY 0
@@ -119,6 +124,10 @@ typedef struct {
 // Temperature units.
 #define TEMPERATURE_UNITS_CELSIUS 0
 #define TEMPERATURE_UNITS_FAHRENHEIT 1
+
+// Weather sources  -- Yahoo stopped working for me as of 8/23/2016.  Appears to be a problem with converting lat/long to WOEID
+#define WEATHER_SOURCE_OPENWEATHERMAP 1
+#define WEATHER_SOURCE_YAHOO 2
 
 // state of how to handle seconds hand  -- 0x08 mask means show seconds hand   0x04 means we need to be registerd for the tap sensor
 #define SHOW_SECONDS_HAND(x)  (x & 0x8)
@@ -183,6 +192,10 @@ typedef struct {
 #define CONDITION_CODE_SNOW_SHOWERS 46
 #define CONDITION_CODE_ISOLATED_THUNDERSHOWERS 47
 
+// OpenWeatherMap condition codes:  http://openweathermap.org/weather-conditions
+
+
+
 int const MIN_WEATHER_UPDATE_INTERVAL_MS = 10 * 1000;
 int const MAX_WEATHER_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -198,6 +211,7 @@ typedef struct {
   int show_battery_at_percent;
   int hand_style;
   int temperature_font_size;
+  int weather_source;
 
   GFont font_hours;
   GFont font_date;
@@ -326,7 +340,7 @@ static void update_temperature(Window *watchface_window, int temperature) {
   text_layer_set_text_color(this->temperature_text_layer, this->color_foreground_1);
 }
 
-static void condition_code_to_icon(Window *watchface_window, int condition_code, bool is_daylight) {
+static void condition_code_to_icon_yahoo(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
   // Set symbol using icon font
@@ -415,6 +429,80 @@ static void condition_code_to_icon(Window *watchface_window, int condition_code,
 }
 
 
+// OpenWeatherMap condition codes:  http://openweathermap.org/weather-conditions
+
+static void condition_code_to_icon_openweathermap(Window *watchface_window, int condition_code, bool is_daylight) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "condition code = %d %d", condition_code, is_daylight);
+  
+  if (condition_code >= 200 && condition_code <= 299) // thunderstorms
+    strncpy(this->condition_text, "C", sizeof(this->condition_text));
+  else if (condition_code >= 300 && condition_code <= 599) // rain or drizzle
+    strncpy(this->condition_text, "E", sizeof(this->condition_text));
+  else if (condition_code >= 600 && condition_code <= 699) // snow
+    if (condition_code == 615 || condition_code == 616) // mixed snow and rain
+      strncpy(this->condition_text, "D", sizeof(this->condition_text));
+    else
+      strncpy(this->condition_text, "F", sizeof(this->condition_text));
+  else if (condition_code >= 700 && condition_code <= 799) // mist/snoke/haze, etc...
+    strncpy(this->condition_text, "G", sizeof(this->condition_text));
+  else if (condition_code == 800) // clear
+    strncpy(this->condition_text, (is_daylight ? "N" : "M"), sizeof(this->condition_text));
+  else if (condition_code >= 801 && condition_code <= 803) // partly cloudy
+    strncpy(this->condition_text, (is_daylight ? "L" : "K"), sizeof(this->condition_text));
+    else {
+
+    switch (condition_code) {
+      case CONDITION_CODE_REFRESH:
+        strncpy(this->condition_text, "f", sizeof(this->condition_text));
+        break;
+      case 804: // overcast clouds
+        strncpy(this->condition_text, "J", sizeof(this->condition_text));
+        break;
+     
+      case 900:  // tornado
+        strncpy(this->condition_text, "A", sizeof(this->condition_text));
+        break;
+      case 901:  // tropical storm
+      case 902:  // hurricane
+        strncpy(this->condition_text, "B", sizeof(this->condition_text));
+        break;
+      case 903: // cold
+        strncpy(this->condition_text, "I", sizeof(this->condition_text));
+        break;
+ 
+      case 904: // hot
+        strncpy(this->condition_text, "O", sizeof(this->condition_text));
+        break;
+ 
+      case 905:  // windy
+        strncpy(this->condition_text, "H", sizeof(this->condition_text));
+        break;
+      case 907: // hail
+        strncpy(this->condition_text, "D", sizeof(this->condition_text));
+        break;
+ 
+      default:
+        strncpy(this->condition_text, "d", sizeof(this->condition_text));
+        break;
+    }
+  }
+}
+
+
+
+static void condition_code_to_icon(Window *watchface_window, int condition_code, bool is_daylight) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (this->weather_source == WEATHER_SOURCE_YAHOO)
+    condition_code_to_icon_yahoo(watchface_window, condition_code, is_daylight);
+  else
+    condition_code_to_icon_openweathermap(watchface_window, condition_code, is_daylight);
+ 
+}
+
+
 static void mark_as_syncing(Window* watchface_window, bool syncing) {
 #if 0
   update_condition(watchface_window, CONDITION_CODE_REFRESH, false);
@@ -428,7 +516,6 @@ static void mark_as_syncing(Window* watchface_window, bool syncing) {
   }
 #endif
 }
-
 static void update_condition(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   
@@ -529,7 +616,8 @@ static void send_weather_request(void *watchface_window) {
   }  else {
     dict_write_int32(iterator, KEY_MESSAGE_TYPE, MESSAGE_TYPE_WEATHER);
     dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i", this->temperature_units);
+    dict_write_int32(iterator, MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i and source = %d", this->temperature_units, this->weather_source);
     dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
     if ((result = app_message_outbox_send()) != APP_MSG_OK) 
       log_reason("unable to send outbox", result);
@@ -1082,6 +1170,7 @@ static void settings_received(void *watchface_window, Message const *message) {
   bool bUpdateTime = false;
   bool bUpdateTickTimer = true;
   bool bUpdateTapSensor = true;
+  bool bUpdateWeather = false;
   
   if (this->seconds_hand_duration != message->seconds_hand_duration) {
     this->seconds_hand_duration = message->seconds_hand_duration;
@@ -1103,7 +1192,8 @@ static void settings_received(void *watchface_window, Message const *message) {
   if (this->temperature_units != message->temperature_units) {
     this->temperature_units = message->temperature_units;
     persist_write_int(MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
-    do_async_weather_update(watchface_window);
+    bUpdateWeather = true;
+
 
   }
 
@@ -1143,7 +1233,7 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_int(MESSAGE_KEY_FG1_COLOR, this->fg1_color);
     this->color_foreground_1 = GColorFromHEX(message->fg1_color);
     layer_mark_dirty(this->background_layer);
-    do_async_weather_update(watchface_window);
+    bUpdateWeather = true;
 
     update_date(watchface_window);
   }
@@ -1174,6 +1264,16 @@ static void settings_received(void *watchface_window, Message const *message) {
     this->weather_quiet_time_stop = message->weather_quiet_time_stop;
     persist_write_int(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP, this->weather_quiet_time_stop);
   }
+  
+  if (this->weather_source != message->weather_source) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "changing weather source from %d to %d", message->weather_source, this->weather_source);
+    this->weather_source = message->weather_source;
+    persist_write_int(MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
+    bUpdateWeather = true;
+  }
+  
+  if (bUpdateWeather)
+    do_async_weather_update(watchface_window);
   
   force_immediate_time_update(watchface_window, bUpdateTime, bUpdateTickTimer, false);
   
@@ -1282,6 +1382,11 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.weather_quiet_time_stop = tuple->value->int32;
         set_clay_message(&message);
         break;
+      case MESSAGE_KEY_WEATHER_SOURCE:
+        message.weather_source = atoi(tuple->value->cstring);
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "Got a weather source %d", message.weather_source);
+        set_clay_message(&message);
+        break;
       default:
         APP_LOG(APP_LOG_LEVEL_ERROR, "Application received unknown key: %lu", tuple->key);
         break;
@@ -1328,6 +1433,7 @@ Window *watchface_window_create() {
     .weather_quiet_time = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME,0),
     .weather_quiet_time_start = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME_START, 23),
     .weather_quiet_time_stop = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP,6),
+    .weather_source = persist_read_int_or_default(MESSAGE_KEY_WEATHER_SOURCE, WEATHER_SOURCE_OPENWEATHERMAP),
 
     .font_hours = NULL,
     .font_date = NULL,
