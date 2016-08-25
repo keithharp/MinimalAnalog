@@ -131,8 +131,7 @@ function queryWeather(messageId, temperatureUnits, weatherSource, position) {
         var nowseconds = Date.now() / 1000;  // now returns in ms, but OpenWeatherMap returns sunrise and sunset in seconds.
         var sunrise = parseInt(json.sys.sunrise);
         var sunset = parseInt(json.sys.sunset);
-        console.log ("now "+nowseconds+ " sunrise " + sunrise + " sunset "+sunset);
-       
+        
         Pebble.sendAppMessage({
           'KEY_MESSAGE_TYPE': MESSAGE_TYPE_WEATHER,
           'KEY_MESSAGE_ID': messageId,

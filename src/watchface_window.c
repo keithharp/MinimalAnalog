@@ -244,7 +244,7 @@ typedef struct {
 #define ICON_BLUETOOTH_DISCONNECT "b"
  
 int const MIN_WEATHER_UPDATE_INTERVAL_MS = 10 * 1000;
-int const MAX_WEATHER_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+int const MAX_WEATHER_UPDATE_INTERVAL_MS = 30 * 60 * 1000;
 
 typedef struct {
   int seconds_hand_mode;
@@ -635,8 +635,13 @@ static void cancel_weather_update_timer(WatchfaceWindow* this) {
 // Drastic measures...  If we get stuck to where we can no longer get messages, then restart the watchface
 static void restart_watchface(void* watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
- 
+  time_t now = time(NULL);
+
   strncpy(this->bluetooth_text, ICON_RESTART, sizeof(this->bluetooth_text));
+  
+  // normally it will restart on it's own, but occasionally, that doesn't seem to happen.  Set timer
+  // to wake up after X seconds in that case.
+  wakeup_schedule(now + 5, 0, false); 
   APP_LOG(APP_LOG_LEVEL_ERROR, "restarting watchface to recover from Pebble communications bug");
   window_stack_pop_all(false);
 }
@@ -1107,9 +1112,7 @@ static void watchface_window_load(Window *watchface_window) {
 
 
 static void watchface_window_appear(Window *watchface_window) {
-  WatchfaceWindow *this = window_get_user_data(watchface_window);
 
-  //APP_LOG(APP_LOG_LEVEL_DEBUG, "in Watchface_window_appear %d", this->weather_update_timer == NULL);
   update_time(watchface_window, local_time_peek());
   watchface_tick_timer_service_subscribe(watchface_window);
 
@@ -1193,8 +1196,6 @@ static void watchface_window_unload(Window *watchface_window) {
 }
 
 static void ready_received(void *watchface_window) {
-  WatchfaceWindow *this = window_get_user_data(watchface_window);
-
   do_async_weather_update(watchface_window);
 
   update_date(watchface_window);
@@ -1315,7 +1316,6 @@ static void settings_received(void *watchface_window, Message const *message) {
   }
   
   if (this->weather_source != message->weather_source) {
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "changing weather source from %d to %d", message->weather_source, this->weather_source);
     this->weather_source = message->weather_source;
     persist_write_int(MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
     bUpdateWeather = true;
@@ -1433,7 +1433,6 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         break;
       case MESSAGE_KEY_WEATHER_SOURCE:
         message.weather_source = atoi(tuple->value->cstring);
-        APP_LOG(APP_LOG_LEVEL_DEBUG, "Got a weather source %d", message.weather_source);
         set_clay_message(&message);
         break;
       default:
