@@ -1112,20 +1112,21 @@ static void watchface_window_load(Window *watchface_window) {
 
 
 static void watchface_window_appear(Window *watchface_window) {
+  ConnectionHandlers handlers = {handle_bluetooth, NULL};
 
   update_time(watchface_window, local_time_peek());
   watchface_tick_timer_service_subscribe(watchface_window);
 
   battery_state_service_subscribe(handle_battery_state);
 
-  update_bluetooth(watchface_window, bluetooth_connection_service_peek());
-  bluetooth_connection_service_subscribe(handle_bluetooth);
+  update_bluetooth(watchface_window, connection_service_peek_pebble_app_connection());
+  connection_service_subscribe(handlers);
 }
 
 static void watchface_window_disappear(Window *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   
-  bluetooth_connection_service_unsubscribe();
+  connection_service_unsubscribe();
   battery_state_service_unsubscribe();
   tick_timer_service_unsubscribe();
   if (TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
