@@ -6,11 +6,14 @@
  *   workaround is to go into an app and come back to the watchface.
  *
  *
+ *
  * Version 1.5 adds
- *   - code cleanup on font to weather condition mapping to make it easier to read
+ *   - code cleanup on font to weather condition mapping to make it easier to read - DONE
+ *   - add DIORITE support - DONE
+ *   - add EMERY support - Need to test, but now adapts to different size screens.
  *
  * Version 1.4 adds
- *   - provide ability to choose OpenWeatherMap or Yahoo  (yahoo had stopped working for me)
+ *   - provide ability to choose OpenWeatherMap or Yahoo  (yahoo had stopped working for me) - DONE
  *
  * Version 1.3 adds
  *   - provide a workaround for a pebble bug that hoses communication after a bluetooth reconnect.  Restart the watchface if this error occurs. --DONE
@@ -345,11 +348,16 @@ static void update_background(Layer *layer, GContext *ctx) {
     graphics_draw_line(ctx, ray_endpoint, center);
   }
 
-  // Draw background color rectangle to cover hour rays
   graphics_context_set_fill_color(ctx, this->color_background);
   graphics_context_set_stroke_color(ctx, this->color_background);
+#if defined(PBL_ROUND)
+  // Draw background color circle to cover hour rays
+  graphics_fill_circle(ctx, center, bounds.size.h/2 - 10);
+#else
+  // Draw background color rectangle to cover hour rays
   graphics_fill_rect(ctx, GRect(10, 10, bounds.size.w - 20, bounds.size.h - 20), 0, GCornerNone);
-
+#endif
+  
   // Draw hours
   graphics_context_set_text_color(ctx, this->color_foreground_1);
   graphics_draw_text(ctx, "12", this->font_hours, GRect((bounds.size.w / 2) - 15, -5, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
@@ -924,8 +932,8 @@ static void watchface_tick_timer_service_subscribe(Window *watchface_window) {
   }
 }
 
-static Layer *battery_layer_create() {
-  Layer *battery_layer = layer_create(GRect(65, 31, 14, 8));
+static Layer *battery_layer_create(int midX, int midY) {
+  Layer *battery_layer = layer_create(GRect(midX - 7, 35, 14, 8));
   layer_set_update_proc(battery_layer, update_battery_state);
   return battery_layer;
 }
@@ -1058,6 +1066,8 @@ static void watchface_window_load(Window *watchface_window) {
 
   Layer *root_layer = window_get_root_layer(watchface_window);
   GRect bounds = layer_get_bounds(root_layer);
+  int midX = bounds.size.w / 2;
+  int midY = bounds.size.h / 2;
 
   this->font_hours = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_24));
   this->font_date = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_15));
@@ -1076,22 +1086,22 @@ static void watchface_window_load(Window *watchface_window) {
   layer_set_update_proc(this->background_layer, update_background);
   layer_add_child(root_layer, this->background_layer);
 
-  this->date_text_layer = watchface_text_layer_create(GRect(42, 121, 60, 20), this->font_date, this->color_foreground_1);
+  this->date_text_layer = watchface_text_layer_create(GRect(midX - 30, midY*2- 50, 60, 20), this->font_date, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->date_text_layer));
 
-  this->temperature_text_layer = watchface_text_layer_create(GRect(20, 90, 44, 20), this->font_temperature, this->color_foreground_1);
+  this->temperature_text_layer = watchface_text_layer_create(GRect(midX/4, midY + 6, 44, 20), this->font_temperature, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->temperature_text_layer));
 
-  this->condition_text_layer = watchface_text_layer_create(GRect(16, 60, 44, 30), this->font_condition, this->color_foreground_1);
+  this->condition_text_layer = watchface_text_layer_create(GRect(midX/4, midY - 21, 44, 30), this->font_condition, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->condition_text_layer));
 
-  this->battery_layer = battery_layer_create();
+  this->battery_layer = battery_layer_create(midX, midY);
   layer_add_child(root_layer, this->battery_layer);
 
-  this->battery_text_layer = watchface_text_layer_create(GRect(63, 39, 18, 14), this->font_battery, this->color_foreground_1);
+  this->battery_text_layer = watchface_text_layer_create(GRect(midX - 9, 47, 18, 14), this->font_battery, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->battery_text_layer));
 
-  this->bluetooth_text_layer = watchface_text_layer_create(GRect(82, 60, 50, 50), this->font_bluetooth, this->color_foreground_1);
+  this->bluetooth_text_layer = watchface_text_layer_create(GRect(midX + 10, midY - 22, 50, 50), this->font_bluetooth, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->bluetooth_text_layer));
   
   this->bluetooth_connected = false;
