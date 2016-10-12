@@ -5,7 +5,8 @@
  *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
  *   workaround is to go into an app and come back to the watchface.
  *
- *
+ * Version 1.6 (in progress)
+ *  - add optional TimeZone display
  *
  * Version 1.5 adds
  *   - code cleanup on font to weather condition mapping to make it easier to read - DONE
@@ -92,6 +93,7 @@ typedef struct {
       int weather_quiet_time_stop;
       int seconds_hand_duration;
       int weather_source;
+      bool show_timezone;
  
     };
   };
@@ -122,6 +124,7 @@ typedef struct {
 #define MESSAGE_KEY_WEATHER_QUIET_TIME_STOP 17
 #define MESSAGE_KEY_SECONDS_HAND_DURATION 18
 #define MESSAGE_KEY_WEATHER_SOURCE 19
+#define MESSAGE_KEY_SHOW_TIMEZONE 20
 
 // Message types.
 #define MESSAGE_TYPE_READY 0
@@ -262,6 +265,9 @@ typedef struct {
   int hand_style;
   int temperature_font_size;
   int weather_source;
+  
+  bool show_timezone;
+  
 
   GFont font_hours;
   GFont font_date;
@@ -304,6 +310,9 @@ typedef struct {
 
   TextLayer *bluetooth_text_layer;
   char bluetooth_text[sizeof("b")];
+  
+  TextLayer *timezone_text_layer;
+  char timezone_text[sizeof("NAEDT")];  //  Longest one I could find was 5 chars. 
 
   GPath *hour_hand_path;
   GPath *minute_hand_path;
@@ -371,10 +380,20 @@ static void update_date(Window *watchface_window) {
 
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
-
+ 
   strftime(this->date_text, sizeof(this->date_text), "%a %d", t);
   text_layer_set_text(this->date_text_layer, this->date_text);
   text_layer_set_text_color(this->date_text_layer, this->color_foreground_1);
+}
+
+static void update_timezone(Window *watchface_window, char* tz) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+  
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "update timezone to %s", tz);
+  
+  strncpy(this->timezone_text, tz,  sizeof(this->timezone_text));
+  text_layer_set_text(this->timezone_text_layer, this->timezone_text);
+  text_layer_set_text_color(this->timezone_text_layer, this->color_foreground_1);
 }
 
 static void update_temperature(Window *watchface_window, int temperature) {
@@ -877,13 +896,17 @@ static void update_time(Window *watchface_window, struct tm *local_time) {
     layer_mark_dirty(this->second_hand_layer);
   //}
 
+  if (this->show_timezone && (strcmp(local_time->tm_zone, this->timezone_text) != 0)) {
+    update_timezone(watchface_window, local_time->tm_zone);
+  } 
+
   if (local_time->tm_sec == 0) { // Top of minute
     layer_mark_dirty(this->hands_layer);
 
     if (local_time->tm_min == 0 && local_time->tm_hour == 0) { // Midnight
         update_date(watchface_window);
     }
-
+    
 #if 0
     // this is for testing updates... comment out for actual releases  ... provides update every 5 minutes
    APP_LOG(APP_LOG_LEVEL_DEBUG, "countdown to weather update %d", local_time->tm_min % 5);
@@ -1095,14 +1118,17 @@ static void watchface_window_load(Window *watchface_window) {
   this->condition_text_layer = watchface_text_layer_create(GRect(midX/4, midY - 21, 44, 30), this->font_condition, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->condition_text_layer));
 
-  this->battery_layer = battery_layer_create(midX, midY);
+  this->battery_layer = battery_layer_create(midX, midY);  // midX - 7, 35, 14, 8
   layer_add_child(root_layer, this->battery_layer);
 
-  this->battery_text_layer = watchface_text_layer_create(GRect(midX - 9, 47, 18, 14), this->font_battery, this->color_foreground_1);
+  this->battery_text_layer = watchface_text_layer_create(GRect(midX +9, 34, 18, 14), this->font_battery, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->battery_text_layer));
 
   this->bluetooth_text_layer = watchface_text_layer_create(GRect(midX + 10, midY - 22, 50, 50), this->font_bluetooth, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->bluetooth_text_layer));
+  
+  this->timezone_text_layer = watchface_text_layer_create(GRect(midX - 30, 47, 60, 20), this->font_date, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->timezone_text_layer));
   
   this->bluetooth_connected = false;
 
@@ -1180,6 +1206,9 @@ static void watchface_window_unload(Window *watchface_window) {
 
   text_layer_destroy(this->date_text_layer);
   this->date_text_layer = NULL;
+  
+  text_layer_destroy(this->timezone_text_layer);
+  this->timezone_text_layer = NULL;
 
   layer_destroy(this->background_layer);
   this->background_layer = NULL;
@@ -1263,6 +1292,12 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_bool(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, this->vibrate_on_bluetooth_disconnect);
   }
 
+  if (this->show_timezone != message->show_timezone) {
+    this->show_timezone = message->show_timezone;
+    persist_write_bool(MESSAGE_KEY_SHOW_TIMEZONE, this->show_timezone);
+    update_timezone(watchface_window, "");  // just make it null.   It will update on the next tick if we want to see the timezone
+  }
+  
   if (this->show_battery_at_percent != message->show_battery_at_percent) {
     this->show_battery_at_percent = message->show_battery_at_percent;
     persist_write_int(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, this->show_battery_at_percent);
@@ -1402,6 +1437,10 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.vibrate_on_bluetooth_disconnect = tuple->value->int32;
         set_clay_message(&message);
       break;
+      case MESSAGE_KEY_SHOW_TIMEZONE:
+        message.show_timezone = tuple->value->int32;
+        set_clay_message(&message);
+      break;
       case MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT:
         message.show_battery_at_percent = tuple->value->int32;
         set_clay_message(&message);
@@ -1519,6 +1558,10 @@ Window *watchface_window_create() {
 
     .bluetooth_text_layer = NULL,
     .bluetooth_text = "",
+    
+    .show_timezone = persist_read_bool_or_default(MESSAGE_KEY_SHOW_TIMEZONE, false),
+    .timezone_text_layer = NULL,
+    .timezone_text = "",
 
     .hands_layer = NULL,
     .second_hand_layer = NULL,

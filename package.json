@@ -26,6 +26,7 @@
             "SECONDS_HAND_DURATION": 18,
             "SHOW_BATTERY_AT_PERCENT": 8,
             "SHOW_SECONDS_HAND": 5,
+            "SHOW_TIMEZONE": 20,
             "TEMPERATURE_SIZE": 14,
             "TEMPERATURE_UNITS": 6,
             "VIBRATE_ON_BLUETOOTH_DISCONNECT": 7,
@@ -38,8 +39,7 @@
         "resources": {
             "media": [
                 {
-                    "file": "images/menu_icon.png",
-                    "menuIcon": true,
+                    "file": "images/IMAGE_MENU_ICON",
                     "name": "IMAGE_MENU_ICON",
                     "targetPlatforms": null,
                     "type": "png"
@@ -60,23 +60,23 @@
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[- 0-9\u00b0]",
+                    "characterRegex": "[12369]",
                     "file": "fonts/Epitet-Regular.ttf",
-                    "name": "FONT_EPITET_REGULAR_12",
+                    "name": "FONT_EPITET_REGULAR_24",
                     "targetPlatforms": null,
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[- SunMonTueWedThuFriSatSun0-9\u00b0]",
+                    "characterRegex": "[-a-zA-Z0-9\u00b0]",
                     "file": "fonts/Epitet-Regular.ttf",
                     "name": "FONT_EPITET_REGULAR_15",
                     "targetPlatforms": null,
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[12369]",
+                    "characterRegex": "[- 0-9\u00b0]",
                     "file": "fonts/Epitet-Regular.ttf",
-                    "name": "FONT_EPITET_REGULAR_24",
+                    "name": "FONT_EPITET_REGULAR_12",
                     "targetPlatforms": null,
                     "type": "font"
                 }

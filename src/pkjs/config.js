@@ -139,6 +139,12 @@ module.exports = [
           "messageKey": "SHOW_BATTERY_AT_PERCENT",
           "label": "Low Battery Threshold",
           "defaultValue": "40"
+        },
+        {
+          "type": "toggle",
+          "messageKey": "SHOW_TIMEZONE",
+          "label": "Show Current TimeZone",
+          "defaultValue": false
         }
   
       ]
