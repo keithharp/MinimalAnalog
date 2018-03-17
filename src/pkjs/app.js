@@ -11,10 +11,19 @@ var clay = new Clay(clayConfig);
 var MESSAGE_TYPE_READY = 0;
 var MESSAGE_TYPE_WEATHER = 1;
 var MESSAGE_TYPE_SETTINGS = 2;
-
+var MESSAGE_TYPE_TICKER = 3;
 // Temperature units.
 var TEMPERATURE_UNITS_CELSIUS = 0;
 var TEMPERATURE_UNITS_FAHRENHEIT = 1;
+// Currency
+var TICKER_COIN_ETHEREUM = 2;
+var TICKER_COIN_RIPPLE = 3;
+var TICKER_COIN_LIGHTCOIN = 4;
+var TICKER_COIN_BCASH = 5;
+var TICKER_COIN_ECC = 6;
+var TICKER_CURRENCY_AUD = 2;
+var TICKER_CURRENCY_CAN = 3;
+var TICKER_CURRENCY_NZD = 4;
 
 var WEATHER_SOURCE_OPENWEATHERMAP = 1;
 var WEATHER_SOURCE_YAHOO = 2;
@@ -93,6 +102,56 @@ function readFromLocalStorage(key, defaultValue) {
 
 function writeToLocalStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function queryCoin(messageId, coin, currency) {
+  var coinS = "bitcoin";
+  var currencyS = "usd";
+  switch (coin) {
+      case TICKER_COIN_ETHEREUM:
+          coinS = "ethereum";
+          break;
+      case TICKER_COIN_RIPPLE:
+          coinS = "ripple";
+          break;
+      case TICKER_COIN_LIGHTCOIN:
+          coinS = "litecoin";
+          break;
+      case TICKER_COIN_BCASH:
+          coinS = "bitcoin-cash";
+          break;
+      case TICKER_COIN_ECC:
+          coinS = "ethereum-classic";
+          break;
+      default:
+          coinS = "bitcoin";
+  }
+  switch (currency) {
+      case TICKER_CURRENCY_AUD:
+          currencyS = "aud";
+          break;
+      case TICKER_CURRENCY_CAN:
+          currencyS = "can";
+          break;
+      case TICKER_CURRENCY_NZD:
+          currencyS = "nzd";
+          break;
+      default:
+          currencyS = "usd";
+  }
+  var url = 'https://api.coinmarketcap.com/v1/ticker/'+coinS.toLowerCase()+'/?convert='+currencyS.toUpperCase()+'&limit=1';
+    console.log ("requesting "+url);
+  sendXhr(url, 'GET', function(responseText) {
+    var responseJson = JSON.parse(responseText);
+      console.log("Ticker:  "+responseJson[0].price_aud);
+      
+      Pebble.sendAppMessage({
+          'KEY_MESSAGE_TYPE': MESSAGE_TYPE_TICKER,
+          'KEY_MESSAGE_ID1' : messageId,
+          'KEY_TICKER': parseFloat((responseJson[0]['price_'+currencyS.toLowerCase()]))
+      });
+      
+  });
 }
 
 function queryWeather(messageId, temperatureUnits, weatherSource, position) {
@@ -176,7 +235,9 @@ Pebble.addEventListener('appmessage', function(event) {
       //console.log("event = "+ str);
       console.log("PebbleKit JS sending weather request with with message id of " + event.payload['KEY_MESSAGE_ID'] + " and units of " + event.payload['TEMPERATURE_UNITS'] + "and weather source of " + event.payload['WEATHER_SOURCE']);
       sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS'], event.payload['WEATHER_SOURCE']);
-      break;
+      console.log("PebbleKit JS sending ticker request with with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
+      queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY']);
+      break; 
     default:
       console.log("PebbleKit JS received message of unknown type: " + messageType);
       break;

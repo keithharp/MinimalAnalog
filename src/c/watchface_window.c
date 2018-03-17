@@ -75,6 +75,12 @@ typedef struct {
       int temperature;
       bool is_daylight;
     };
+    
+    // Ticker message.
+    struct {
+       int message_id1;
+       int ticker;  
+    };
 
     // Settings message.
     struct {
@@ -94,6 +100,8 @@ typedef struct {
       int seconds_hand_duration;
       int weather_source;
       bool show_timezone;
+      int coin;
+      int currency;
  
     };
   };
@@ -107,6 +115,10 @@ typedef struct {
 #define KEY_CONDITION_CODE 2
 #define KEY_TEMPERATURE 3
 #define KEY_IS_DAYLIGHT 4
+
+// Keys used in ticker message
+#define KEY_TICKER 21
+#define KEY_MESSAGE_ID1 23
 
 // Keys used in settings message.
 #define MESSAGE_KEY_SHOW_SECONDS_HAND 5
@@ -130,10 +142,15 @@ typedef struct {
 #define MESSAGE_TYPE_READY 0
 #define MESSAGE_TYPE_WEATHER 1
 #define MESSAGE_TYPE_SETTINGS 2
+#define MESSAGE_TYPE_TICKER 3
 
 // Temperature units.
 #define TEMPERATURE_UNITS_CELSIUS 0
 #define TEMPERATURE_UNITS_FAHRENHEIT 1
+
+// Ticker settings
+#define MESSAGE_KEY_COIN 24
+#define MESSAGE_KEY_CURRENCY 25
 
 // Weather sources  -- Yahoo stopped working for me as of 8/23/2016.  Appears to be a problem with converting lat/long to WOEID
 #define WEATHER_SOURCE_OPENWEATHERMAP 1
@@ -264,6 +281,8 @@ typedef struct {
   int show_battery_at_percent;
   int hand_style;
   int temperature_font_size;
+  int ticker_coin;
+  int ticker_currency;
   int weather_source;
   
   bool show_timezone;
@@ -271,6 +290,8 @@ typedef struct {
 
   GFont font_hours;
   GFont font_date;
+  GFont font_ticker;
+  GFont font_ticker_small;
   GFont font_temperature;
   GFont font_temperature_small;
   // GFont font_temperature_medium;   The medium temperature font just reuses the font_date so no need to reload it.
@@ -298,6 +319,9 @@ typedef struct {
   TextLayer *date_text_layer;
   char date_text[sizeof("Jan 31")];
 
+  TextLayer *ticker_text_layer;
+  char ticker_text[8];
+
   TextLayer *temperature_text_layer;
   char temperature_text[sizeof("-999°")];
 
@@ -323,6 +347,10 @@ typedef struct {
   AppTimer *weather_update_timer;
   int weather_update_backoff_interval;
   int expected_weather_message_id;
+    
+  AppTimer *ticker_update_timer;
+  int ticker_update_backoff_interval;
+  int expected_ticker_message_id;
 } WatchfaceWindow;
 
 static Window *g_watchface_window = NULL;
@@ -373,6 +401,19 @@ static void update_background(Layer *layer, GContext *ctx) {
   graphics_draw_text(ctx, "3", this->font_hours, GRect(bounds.size.w - 31, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
   graphics_draw_text(ctx, "6", this->font_hours, GRect((bounds.size.w / 2) - 15, bounds.size.h - 26, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
   graphics_draw_text(ctx, "9", this->font_hours, GRect(1, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+}
+
+static void update_ticker(Window *watchface_window, int ticker) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  GRect ticker_text_layer_frame = layer_get_frame(text_layer_get_layer(this->ticker_text_layer));
+     char const *format;
+  format = "$%d";
+  snprintf(this->ticker_text, sizeof(this->ticker_text), format, ticker);
+  text_layer_set_text(this->ticker_text_layer, this->ticker_text);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Updating Ticker to : %s", this->ticker_text);
+  layer_set_frame(text_layer_get_layer(this->ticker_text_layer), ticker_text_layer_frame);
+  text_layer_set_text_color(this->ticker_text_layer, this->color_foreground_1);
 }
 
 static void update_date(Window *watchface_window) {
@@ -647,6 +688,17 @@ static void log_reason(char* info, AppMessageResult reason) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %x %s", info, reason, reason_string); 
 }
 
+static void cancel_ticker_update_timer(WatchfaceWindow* this) {
+  
+   // In case there is already a timer, turn it off
+  if (this->ticker_update_timer) {
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "getting ready to close weather_timer");
+    app_timer_cancel(this->ticker_update_timer);
+    this->ticker_update_timer = NULL;
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "done with resetting timer");
+  }
+}
+
 static void cancel_weather_update_timer(WatchfaceWindow* this) {
   
    // In case there is already a timer, turn it off
@@ -699,12 +751,15 @@ static void send_weather_request(void *watchface_window) {
     dict_write_int32(iterator, KEY_MESSAGE_TYPE, MESSAGE_TYPE_WEATHER);
     dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
     dict_write_int32(iterator, MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
+    dict_write_int32(iterator, KEY_MESSAGE_ID1, ++this->expected_ticker_message_id);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i and source = %d", this->temperature_units, this->weather_source);
     dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
+    dict_write_int32(iterator, MESSAGE_KEY_COIN, this->ticker_coin);
+    dict_write_int32(iterator, MESSAGE_KEY_CURRENCY, this->ticker_currency);
     if ((result = app_message_outbox_send()) != APP_MSG_OK) 
       log_reason("unable to send outbox", result);
   }    
-  mark_as_syncing(watchface_window, true);
+  //mark_as_syncing(watchface_window, true);
 
 }
 
@@ -743,7 +798,6 @@ static void do_async_weather_update(Window* watchface_window) {
    this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
    send_weather_request(watchface_window);  
 }
-
 
 static void update_bluetooth(Window *watchface_window, bool bluetooth_connected) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
@@ -978,6 +1032,16 @@ GFont get_weather_font(WatchfaceWindow *this) {
 }
 
 
+GFont get_ticker_font(WatchfaceWindow *this) {
+
+      if (this->font_ticker_small == NULL)
+         this->font_ticker_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
+      return this->font_ticker_small;
+ 
+
+}
+
+    
 static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_font, GColor layer_color) {
   TextLayer *new_text_layer = text_layer_create(layer_bounds);
   text_layer_set_font(new_text_layer, layer_font);
@@ -1094,8 +1158,10 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->font_hours = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_24));
   this->font_date = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_15));
+  this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
   this->font_temperature_small = NULL;
   this->font_temperature = get_weather_font(this);
+    this->font_ticker_small = NULL;
   this->font_condition = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_24));
   this->font_battery = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_12));
   this->font_bluetooth = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_36));
@@ -1111,6 +1177,9 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->date_text_layer = watchface_text_layer_create(GRect(midX - 30, midY*2- 50, 60, 20), this->font_date, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->date_text_layer));
+    
+  this->ticker_text_layer = watchface_text_layer_create(GRect(midX +9, midY - 21, 50, 30), this->font_ticker, this->color_foreground_1);
+  layer_add_child(root_layer, text_layer_get_layer(this->ticker_text_layer));
 
   this->temperature_text_layer = watchface_text_layer_create(GRect(midX/4, midY + 6, 44, 20), this->font_temperature, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->temperature_text_layer));
@@ -1179,6 +1248,7 @@ static void watchface_window_unload(Window *watchface_window) {
   }
   
   cancel_weather_update_timer(this);
+    cancel_ticker_update_timer(this);
 
   gpath_destroy(this->hour_hand_path);
   gpath_destroy(this->minute_hand_path);
@@ -1204,6 +1274,9 @@ static void watchface_window_unload(Window *watchface_window) {
   text_layer_destroy(this->temperature_text_layer);
   this->temperature_text_layer = NULL;
 
+  text_layer_destroy(this->ticker_text_layer);
+  this->ticker_text_layer = NULL;
+    
   text_layer_destroy(this->date_text_layer);
   this->date_text_layer = NULL;
   
@@ -1231,13 +1304,15 @@ static void watchface_window_unload(Window *watchface_window) {
   fonts_unload_custom_font(this->font_date);
   this->font_date = NULL;
 
+  fonts_unload_custom_font(this->font_ticker);
+  this->font_ticker = NULL;
+    
   fonts_unload_custom_font(this->font_hours);
   this->font_hours = NULL;
 }
 
 static void ready_received(void *watchface_window) {
-  do_async_weather_update(watchface_window);
-
+  do_async_weather_update(watchface_window);;
   update_date(watchface_window);
 }
 
@@ -1252,6 +1327,15 @@ static void weather_received(void *watchface_window, Message const *message) {
   }
 }
 
+static void ticker_received(void *watchface_window, Message const *message) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
+
+  if (message->message_id1 == this->expected_ticker_message_id) {
+    cancel_ticker_update_timer(this);
+
+    update_ticker(watchface_window, message->ticker);
+  }
+}
 
 
 static void settings_received(void *watchface_window, Message const *message) {
@@ -1283,10 +1367,20 @@ static void settings_received(void *watchface_window, Message const *message) {
     this->temperature_units = message->temperature_units;
     persist_write_int(MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
     bUpdateWeather = true;
-
-
+  }
+  
+  if (this->ticker_coin != message->coin) {
+      this->ticker_coin = message->coin;
+      persist_write_int(MESSAGE_KEY_COIN, this->ticker_coin);
+      bUpdateWeather = true;
   }
 
+  if (this->ticker_currency != message->currency) {
+      this->ticker_currency = message->currency;
+      persist_write_int(MESSAGE_KEY_CURRENCY, this->ticker_currency);
+      bUpdateWeather = true;
+  }
+    
   if (this->vibrate_on_bluetooth_disconnect != message->vibrate_on_bluetooth_disconnect) {
     this->vibrate_on_bluetooth_disconnect = message->vibrate_on_bluetooth_disconnect;
     persist_write_bool(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, this->vibrate_on_bluetooth_disconnect);
@@ -1330,10 +1424,9 @@ static void settings_received(void *watchface_window, Message const *message) {
     this->color_foreground_1 = GColorFromHEX(message->fg1_color);
     layer_mark_dirty(this->background_layer);
     bUpdateWeather = true;
-
     update_date(watchface_window);
   }
-  
+    
   if (this->fg2_color != message->fg2_color) {
     this->fg2_color = message->fg2_color;
     persist_write_int(MESSAGE_KEY_FG2_COLOR, this->fg2_color);
@@ -1367,7 +1460,7 @@ static void settings_received(void *watchface_window, Message const *message) {
     bUpdateWeather = true;
   }
   
-  if (bUpdateWeather)
+  if (bUpdateWeather) 
     do_async_weather_update(watchface_window);
   
   force_immediate_time_update(watchface_window, bUpdateTime, bUpdateTickTimer, false);
@@ -1412,6 +1505,9 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
       case KEY_MESSAGE_ID:
         message.message_id = tuple->value->int32;
         break;
+      case KEY_MESSAGE_ID1:
+        message.message_id1 = tuple->value->int32;
+        break;
       case KEY_CONDITION_CODE:
         message.condition_code = tuple->value->int32;
         break;
@@ -1420,6 +1516,17 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         break;
       case KEY_IS_DAYLIGHT:
         message.is_daylight = tuple->value->int32;
+        break;
+      case KEY_TICKER:
+        message.ticker = tuple->value->int32;
+        break;
+      case MESSAGE_KEY_COIN:
+        message.coin = atoi(tuple->value->cstring);
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_CURRENCY:
+        message.currency = atoi(tuple->value->cstring);
+        set_clay_message(&message);
         break;
       case MESSAGE_KEY_SHOW_SECONDS_HAND:
         message.seconds_hand_mode = atoi(tuple->value->cstring);
@@ -1501,6 +1608,9 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
     case MESSAGE_TYPE_SETTINGS:
        settings_received(watchface_window, &message);
        break;
+    case MESSAGE_TYPE_TICKER:
+      ticker_received(watchface_window, &message);
+      break;
     default:
       APP_LOG(APP_LOG_LEVEL_ERROR, "Application received message of unknown type: %d ", message.message_type);
       break;
@@ -1509,7 +1619,6 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
 
 Window *watchface_window_create() {
   Window *watchface_window = window_create();
-
   WatchfaceWindow *this = malloc(sizeof(*this));
   *this = (__typeof(*this)) {
     // IMPORTANT: Keep default values in sync with watchface_window.js.
@@ -1517,7 +1626,8 @@ Window *watchface_window_create() {
     .seconds_hand_duration = persist_read_int_or_default(MESSAGE_KEY_SECONDS_HAND_DURATION, 2 ),
     .seconds_duration_timer = NULL,
     .most_recent_tap = 0,
-    
+    .ticker_currency = persist_read_int_or_default(MESSAGE_KEY_CURRENCY, 1),
+    .ticker_coin = persist_read_int_or_default(MESSAGE_KEY_COIN, 1),
     .temperature_units = persist_read_int_or_default(MESSAGE_KEY_TEMPERATURE_UNITS, TEMPERATURE_UNITS_FAHRENHEIT),
     .vibrate_on_bluetooth_disconnect = persist_read_bool_or_default(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, true),
     .show_battery_at_percent = persist_read_int_or_default(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, 40),
@@ -1535,6 +1645,7 @@ Window *watchface_window_create() {
 
     .font_hours = NULL,
     .font_date = NULL,
+    .font_ticker = NULL,
     .font_temperature = NULL,
     .font_temperature_small = NULL,
     .font_condition = NULL,
@@ -1548,6 +1659,9 @@ Window *watchface_window_create() {
 
     .temperature_text_layer = NULL,
     .temperature_text = "",
+      
+    .ticker_text_layer = NULL,
+    .ticker_text = "",
 
     .condition_text_layer = NULL,
     .condition_text = "",
@@ -1569,6 +1683,9 @@ Window *watchface_window_create() {
     .weather_update_timer = NULL,
     .weather_update_backoff_interval = -1,
     .expected_weather_message_id = 0,
+    .ticker_update_timer = NULL,
+    .ticker_update_backoff_interval = -1,
+    .expected_ticker_message_id = 0,
   };
   window_set_user_data(watchface_window, this);
 
@@ -1584,7 +1701,7 @@ Window *watchface_window_create() {
   app_message_register_outbox_sent(outbox_sent);
   app_message_register_outbox_failed(outbox_failed);
  //app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
-   app_message_open(1000,1000);
+  app_message_open(1000,1000);
 
   g_watchface_window = watchface_window;
   return watchface_window;

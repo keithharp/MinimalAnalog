@@ -14,6 +14,8 @@
         "enableMultiJS": true,
         "messageKeys": {
             "BG_COLOR": 10,
+            "COIN": 24,
+            "CURRENCY": 25,
             "FG1_COLOR": 11,
             "FG2_COLOR": 12,
             "FG3_COLOR": 13,
@@ -21,14 +23,17 @@
             "KEY_CONDITION_CODE": 2,
             "KEY_IS_DAYLIGHT": 4,
             "KEY_MESSAGE_ID": 1,
+            "KEY_MESSAGE_ID1": 23,
             "KEY_MESSAGE_TYPE": 0,
             "KEY_TEMPERATURE": 3,
+            "KEY_TICKER": 21,
             "SECONDS_HAND_DURATION": 18,
             "SHOW_BATTERY_AT_PERCENT": 8,
             "SHOW_SECONDS_HAND": 5,
             "SHOW_TIMEZONE": 20,
             "TEMPERATURE_SIZE": 14,
             "TEMPERATURE_UNITS": 6,
+            "TICKER_SIZE": 22,
             "VIBRATE_ON_BLUETOOTH_DISCONNECT": 7,
             "WEATHER_QUIET_TIME": 15,
             "WEATHER_QUIET_TIME_START": 16,
@@ -46,7 +51,7 @@
                 },
                 {
                     "file": "fonts/myicons-webfont.ttf",
-                    "name": "FONT_ICONS_24",
+                    "name": "FONT_ICONS_36",
                     "type": "font"
                 },
                 {
@@ -56,13 +61,13 @@
                 },
                 {
                     "file": "fonts/myicons-webfont.ttf",
-                    "name": "FONT_ICONS_36",
+                    "name": "FONT_ICONS_24",
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[12369]",
+                    "characterRegex": "[- 0-9\u00b0]",
                     "file": "fonts/Epitet-Regular.ttf",
-                    "name": "FONT_EPITET_REGULAR_24",
+                    "name": "FONT_EPITET_REGULAR_12",
                     "targetPlatforms": null,
                     "type": "font"
                 },
@@ -74,9 +79,9 @@
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[- 0-9\u00b0]",
+                    "characterRegex": "[12369]",
                     "file": "fonts/Epitet-Regular.ttf",
-                    "name": "FONT_EPITET_REGULAR_12",
+                    "name": "FONT_EPITET_REGULAR_24",
                     "targetPlatforms": null,
                     "type": "font"
                 }

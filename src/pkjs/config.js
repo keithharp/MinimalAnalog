@@ -215,6 +215,70 @@ module.exports = [
       }
     ]
       },
+    { "type": "section",
+       "items": [
+         {
+           "type": "heading",
+           "defaultValue" : "Ticker Settings"
+         },
+         {
+           "type": "radiogroup",
+           "messageKey": "COIN",
+           "label": "Coin",
+           "defaultValue" : "1",
+           "options": [
+             { 
+               "label": "bitcoin", 
+               "value": "1"
+             },
+             { 
+               "label": "ethereum", 
+               "value": "2"
+             },
+             { 
+               "label": "ripple", 
+               "value": "3"
+             },
+             { 
+               "label": "lightcoin", 
+               "value": "4"
+             },
+             { 
+               "label": "bitcoin-cash", 
+               "value": "5"
+             }, 
+             { 
+               "label": "ethereum-classic", 
+               "value": "6"
+             }
+           ]
+         },
+         {
+           "type": "radiogroup",
+           "messageKey": "CURRENCY",
+           "label": "Currency",
+           "defaultValue" : "1",
+           "options": [
+             { 
+               "label": "usd", 
+               "value": "1"
+             },
+             { 
+               "label": "aud", 
+               "value": "2"
+             },
+             { 
+               "label": "can", 
+               "value": "3"
+             },
+             { 
+               "label": "nzd", 
+               "value": "4"
+             },
+           ]
+         },   
+       ]
+      },
   {
     "type": "submit",
     "defaultValue": "Save Settings"
