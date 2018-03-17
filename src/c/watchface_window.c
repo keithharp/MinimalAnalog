@@ -5,8 +5,8 @@
  *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
  *   workaround is to go into an app and come back to the watchface.
  *
- * Version 1.6 (in progress)
- *  - add optional TimeZone display
+ * Version 1.6 adds
+ *   - initial cryptocurrency ticker support. Whole dollar value only.
  *
  * Version 1.5 adds
  *   - code cleanup on font to weather condition mapping to make it easier to read - DONE
@@ -54,6 +54,11 @@
  *   - Replace web based settings (no longer available) with Clay based ones - DONE
  *   - Allow a larger font choice for the temperature - DONE
  *   - Use Quiet Time as the time to avoid weather updates rather than (or in addition to) fixed times - Not possible with current APIs
+ *
+ * TODO:
+ *   - Allow decimal support in coin dollar value.
+ *   - Abbreiviate 10000 to 10K in coin dollar value
+ *   - Allow font selection for coin ticker
  *
  * Sean Ullyatt - sullyatt@gmail.com
  * Reliant Web Solutions, LLC (c) 2015 - All Right Reserved
