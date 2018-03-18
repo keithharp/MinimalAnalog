@@ -3,7 +3,7 @@ Pebble Watch Face
 
 - Added cryptocurrency ticker
  - BTC/ETH/XRP/LTC/ECC/BCH
- - USD/AUD/CAN/NZD
+ - USD/AUD/CAN/NZD/EUR/PND
 
 ![Alt text](screenshots/analog-btc.png?raw=true "Watch")
 
