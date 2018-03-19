@@ -107,6 +107,7 @@ typedef struct {
       bool show_timezone;
       int coin;
       int currency;
+      bool show_ticker;
     };
   };
 } Message;
@@ -155,6 +156,7 @@ typedef struct {
 // Ticker settings
 #define MESSAGE_KEY_COIN 24
 #define MESSAGE_KEY_CURRENCY 25
+#define TICKER_ON 26
 
 // Weather sources  -- Yahoo stopped working for me as of 8/23/2016.  Appears to be a problem with converting lat/long to WOEID
 #define WEATHER_SOURCE_OPENWEATHERMAP 1
@@ -290,6 +292,7 @@ typedef struct {
   int weather_source;
   
   bool show_timezone;
+  bool show_ticker;
   
   GFont font_hours;
   GFont font_date;
@@ -744,11 +747,14 @@ static void send_weather_request(void *watchface_window) {
     dict_write_int32(iterator, KEY_MESSAGE_TYPE, MESSAGE_TYPE_WEATHER);
     dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
     dict_write_int32(iterator, MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
-    dict_write_int32(iterator, KEY_MESSAGE_ID1, ++this->expected_ticker_message_id);
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i and source = %d", this->temperature_units, this->weather_source);
     dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
-    dict_write_int32(iterator, MESSAGE_KEY_COIN, this->ticker_coin);
-    dict_write_int32(iterator, MESSAGE_KEY_CURRENCY, this->ticker_currency);
+    dict_write_int32(iterator, TICKER_ON, this->show_ticker);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i and source = %d", this->temperature_units, this->weather_source);
+    if (this->show_ticker) {
+      dict_write_int32(iterator, KEY_MESSAGE_ID1, ++this->expected_ticker_message_id);
+      dict_write_int32(iterator, MESSAGE_KEY_COIN, this->ticker_coin);
+      dict_write_int32(iterator, MESSAGE_KEY_CURRENCY, this->ticker_currency);
+    }
     if ((result = app_message_outbox_send()) != APP_MSG_OK) 
       log_reason("unable to send outbox", result);
   }    
@@ -1380,6 +1386,12 @@ static void settings_received(void *watchface_window, Message const *message) {
     update_timezone(watchface_window, "");  // just make it null.   It will update on the next tick if we want to see the timezone
   }
   
+  if (this->show_ticker != message->show_ticker) {
+    this->show_ticker = message->show_ticker;
+    persist_write_bool(TICKER_ON, this->show_ticker);
+    update_ticker(watchface_window, "");
+  }
+  
   if (this->show_battery_at_percent != message->show_battery_at_percent) {
     this->show_battery_at_percent = message->show_battery_at_percent;
     persist_write_int(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, this->show_battery_at_percent);
@@ -1671,6 +1683,8 @@ Window *watchface_window_create() {
     .weather_update_timer = NULL,
     .weather_update_backoff_interval = -1,
     .expected_weather_message_id = 0,
+    
+    .show_ticker = persist_read_bool_or_default(TICKER_ON, true),
     .ticker_update_timer = NULL,
     .ticker_update_backoff_interval = -1,
     .expected_ticker_message_id = 0,

@@ -222,6 +222,12 @@ module.exports = [
            "defaultValue" : "Ticker Settings"
          },
          {
+          "type": "toggle",
+          "messageKey": "TICKER_ON",
+          "label": "Enable Cryptocurrency Ticker",
+          "defaultValue": true
+         },
+         {
            "type": "radiogroup",
            "messageKey": "COIN",
            "label": "Coin",

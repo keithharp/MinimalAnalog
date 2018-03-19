@@ -255,8 +255,10 @@ Pebble.addEventListener('appmessage', function(event) {
       //console.log("event = "+ str);
       console.log("PebbleKit JS sending weather request with with message id of " + event.payload['KEY_MESSAGE_ID'] + " and units of " + event.payload['TEMPERATURE_UNITS'] + "and weather source of " + event.payload['WEATHER_SOURCE']);
       sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS'], event.payload['WEATHER_SOURCE']);
-      console.log("PebbleKit JS sending ticker request with with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
-      queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY']);
+      if (event.payload['TICKER_ON']) {
+        console.log("PebbleKit JS sending ticker request with with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
+        queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY']);
+      }
       break; 
     default:
       console.log("PebbleKit JS received message of unknown type: " + messageType);

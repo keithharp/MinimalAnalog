@@ -33,6 +33,7 @@
             "SHOW_TIMEZONE": 20,
             "TEMPERATURE_SIZE": 14,
             "TEMPERATURE_UNITS": 6,
+            "TICKER_ON": 26,
             "TICKER_SIZE": 22,
             "VIBRATE_ON_BLUETOOTH_DISCONNECT": 7,
             "WEATHER_QUIET_TIME": 15,
