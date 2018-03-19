@@ -95,18 +95,27 @@ function parseTime(dateValue, timeString) {
   return dateTime.valueOf();
 }
 
-function readFromLocalStorage(key, defaultValue) {
-  var value = localStorage.getItem(key);
-  return value === null ? defaultValue : JSON.parse(value);
+//TODO add euro / poind?
+function parseCurrency(currency) {
+    var currencyS = "usd";
+    switch (currency) {
+      case TICKER_CURRENCY_AUD:
+          currencyS = "aud";
+          break;
+      case TICKER_CURRENCY_CAN:
+          currencyS = "can";
+          break;
+      case TICKER_CURRENCY_NZD:
+          currencyS = "nzd";
+          break;
+      default:
+          currencyS = "usd";
+  }
+  return currencyS;
 }
 
-function writeToLocalStorage(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function queryCoin(messageId, coin, currency) {
-  var coinS = "bitcoin";
-  var currencyS = "usd";
+function parseCoin(coin) {
+    var coinS = "bitcoin";
   switch (coin) {
       case TICKER_COIN_ETHEREUM:
           coinS = "ethereum";
@@ -126,29 +135,40 @@ function queryCoin(messageId, coin, currency) {
       default:
           coinS = "bitcoin";
   }
-  switch (currency) {
-      case TICKER_CURRENCY_AUD:
-          currencyS = "aud";
-          break;
-      case TICKER_CURRENCY_CAN:
-          currencyS = "can";
-          break;
-      case TICKER_CURRENCY_NZD:
-          currencyS = "nzd";
-          break;
-      default:
-          currencyS = "usd";
-  }
-  var url = 'https://api.coinmarketcap.com/v1/ticker/'+coinS.toLowerCase()+'/?convert='+currencyS.toUpperCase()+'&limit=1';
+  return coinS.toLowerCase();
+}
+
+function readFromLocalStorage(key, defaultValue) {
+  var value = localStorage.getItem(key);
+  return value === null ? defaultValue : JSON.parse(value);
+}
+
+function writeToLocalStorage(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function queryCoin(messageId, coin, currency) {
+  var currencyS = parseCurrency(currency);
+  
+  var url = 'https://api.coinmarketcap.com/v1/ticker/'+parseCoin(coin)+'/?convert='+currencyS.toUpperCase()+'&limit=1';
     console.log ("requesting "+url);
-  sendXhr(url, 'GET', function(responseText) {
+    sendXhr(url, 'GET', function(responseText) {
     var responseJson = JSON.parse(responseText);
       console.log("Ticker:  "+responseJson[0].price_aud);
-      
+      /* TODO
+        Format value
+        0.1234
+        10.123
+        100.12
+        1234
+        10K
+        10.1K
+        Update font to include $ K . and maybe pound/euro?
+      */
       Pebble.sendAppMessage({
           'KEY_MESSAGE_TYPE': MESSAGE_TYPE_TICKER,
           'KEY_MESSAGE_ID1' : messageId,
-          'KEY_TICKER': parseFloat((responseJson[0]['price_'+currencyS.toLowerCase()]))
+          'KEY_TICKER': responseJson[0]['price_'+currencyS.toLowerCase()]
       });
       
   });

@@ -51,7 +51,7 @@
                 },
                 {
                     "file": "fonts/myicons-webfont.ttf",
-                    "name": "FONT_ICONS_36",
+                    "name": "FONT_ICONS_24",
                     "type": "font"
                 },
                 {
@@ -61,13 +61,13 @@
                 },
                 {
                     "file": "fonts/myicons-webfont.ttf",
-                    "name": "FONT_ICONS_24",
+                    "name": "FONT_ICONS_36",
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[- 0-9\u00b0]",
+                    "characterRegex": "[12369]",
                     "file": "fonts/Epitet-Regular.ttf",
-                    "name": "FONT_EPITET_REGULAR_12",
+                    "name": "FONT_EPITET_REGULAR_24",
                     "targetPlatforms": null,
                     "type": "font"
                 },
@@ -79,9 +79,9 @@
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[12369]",
+                    "characterRegex": "[- 0-9\u00b0]",
                     "file": "fonts/Epitet-Regular.ttf",
-                    "name": "FONT_EPITET_REGULAR_24",
+                    "name": "FONT_EPITET_REGULAR_12",
                     "targetPlatforms": null,
                     "type": "font"
                 }

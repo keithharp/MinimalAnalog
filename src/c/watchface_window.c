@@ -84,7 +84,7 @@ typedef struct {
     // Ticker message.
     struct {
        int message_id1;
-       int ticker;  
+       char* ticker; 
     };
 
     // Settings message.
@@ -107,7 +107,6 @@ typedef struct {
       bool show_timezone;
       int coin;
       int currency;
- 
     };
   };
 } Message;
@@ -292,7 +291,6 @@ typedef struct {
   
   bool show_timezone;
   
-
   GFont font_hours;
   GFont font_date;
   GFont font_ticker;
@@ -325,7 +323,7 @@ typedef struct {
   char date_text[sizeof("Jan 31")];
 
   TextLayer *ticker_text_layer;
-  char ticker_text[8];
+  char ticker_text[9];
 
   TextLayer *temperature_text_layer;
   char temperature_text[sizeof("-999°")];
@@ -361,8 +359,6 @@ typedef struct {
 static Window *g_watchface_window = NULL;
 
 static void force_immediate_time_update(Window* watchface_window, bool bUpdateTime, bool bUpdateTickTimerService, bool bUpdateDurationTimer);
-
-
 
 static void update_background(Layer *layer, GContext *ctx) {
   WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
@@ -408,12 +404,12 @@ static void update_background(Layer *layer, GContext *ctx) {
   graphics_draw_text(ctx, "9", this->font_hours, GRect(1, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
 }
 
-static void update_ticker(Window *watchface_window, int ticker) {
+static void update_ticker(Window *watchface_window, char* ticker) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
   GRect ticker_text_layer_frame = layer_get_frame(text_layer_get_layer(this->ticker_text_layer));
-     char const *format;
-  format = "$%d";
+  char const *format;
+  format = "$%s";
   snprintf(this->ticker_text, sizeof(this->ticker_text), format, ticker);
   text_layer_set_text(this->ticker_text_layer, this->ticker_text);
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Updating Ticker to : %s", this->ticker_text);
@@ -612,10 +608,7 @@ static void condition_code_to_icon_openweathermap(Window *watchface_window, int 
       }
   }
   strncpy(this->condition_text, icon, sizeof(this->condition_text));
-
 }
-
-
 
 static void condition_code_to_icon(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
@@ -624,9 +617,7 @@ static void condition_code_to_icon(Window *watchface_window, int condition_code,
     condition_code_to_icon_yahoo(watchface_window, condition_code, is_daylight);
   else
     condition_code_to_icon_openweathermap(watchface_window, condition_code, is_daylight);
- 
 }
-
 
 static void mark_as_syncing(Window* watchface_window, bool syncing) {
 #if 0
@@ -648,8 +639,6 @@ static void update_condition(Window *watchface_window, int condition_code, bool 
   text_layer_set_text_color(this->condition_text_layer, this->color_foreground_1);
 }
 
-
-  
 static void log_reason(char* info, AppMessageResult reason) {
   char reason_string[1000];
   reason_string[0] = 0;
@@ -714,7 +703,6 @@ static void cancel_weather_update_timer(WatchfaceWindow* this) {
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "done with resetting timer");
   }
 }
-
 
 // Drastic measures...  If we get stuck to where we can no longer get messages, then restart the watchface
 static void restart_watchface(void* watchface_window) {
@@ -1036,17 +1024,12 @@ GFont get_weather_font(WatchfaceWindow *this) {
 
 }
 
-
 GFont get_ticker_font(WatchfaceWindow *this) {
-
       if (this->font_ticker_small == NULL)
          this->font_ticker_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
       return this->font_ticker_small;
- 
-
 }
-
-    
+ 
 static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_font, GColor layer_color) {
   TextLayer *new_text_layer = text_layer_create(layer_bounds);
   text_layer_set_font(new_text_layer, layer_font);
@@ -1166,7 +1149,7 @@ static void watchface_window_load(Window *watchface_window) {
   this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
   this->font_temperature_small = NULL;
   this->font_temperature = get_weather_font(this);
-    this->font_ticker_small = NULL;
+  this->font_ticker_small = NULL;
   this->font_condition = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_24));
   this->font_battery = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_12));
   this->font_bluetooth = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_36));
@@ -1523,7 +1506,7 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.is_daylight = tuple->value->int32;
         break;
       case KEY_TICKER:
-        message.ticker = tuple->value->int32;
+        message.ticker = tuple->value->cstring;
         break;
       case MESSAGE_KEY_COIN:
         message.coin = atoi(tuple->value->cstring);
