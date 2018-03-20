@@ -97,6 +97,7 @@ typedef struct {
       int fg2_color;
       int fg3_color;
       int temperature_font_size;
+      int ticker_font_size;
       bool weather_quiet_time;
       int weather_quiet_time_start;
       int weather_quiet_time_stop;
@@ -288,6 +289,7 @@ typedef struct {
   int ticker_coin;
   int ticker_currency;
   int weather_source;
+  int ticker_font_size;
   
   bool show_timezone;
   bool show_ticker;
@@ -1025,9 +1027,26 @@ GFont get_weather_font(WatchfaceWindow *this) {
        return this->font_date;
     break;
   }
-
 }
 
+  
+GFont get_ticker_font(WatchfaceWindow *this) {
+  switch (this->ticker_font_size) {
+    case 1: // small font;
+      if (this->font_ticker_small == NULL)
+         this->font_ticker_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
+      return this->font_ticker_small;
+    break;
+    default: // no font picked.  Default to medium font, but log an error first
+      APP_LOG(APP_LOG_LEVEL_ERROR, "trying to set ticker font, but value out of range %d", this->ticker_font_size);      
+    case 2: // medium font  (which is the same font used for date)
+       return this->font_date;
+    break;
+  }
+}
+
+  
+  
 static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_font, GColor layer_color) {
   TextLayer *new_text_layer = text_layer_create(layer_bounds);
   text_layer_set_font(new_text_layer, layer_font);
@@ -1144,8 +1163,9 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->font_hours = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_24));
   this->font_date = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_15));
-  //this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
-  this->font_ticker = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+  this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
+  //this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_12));
+  //this->font_ticker = fonts_get_system_font(FONT_KEY_GOTHIC_18);
   this->font_temperature_small = NULL;
   this->font_temperature = get_weather_font(this);
   this->font_ticker_small = NULL;
@@ -1378,7 +1398,7 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_bool(MESSAGE_KEY_SHOW_TIMEZONE, this->show_timezone);
     update_timezone(watchface_window, "");  // just make it null.   It will update on the next tick if we want to see the timezone
   }
-  
+
   if (this->show_ticker != message->show_ticker) {
     this->show_ticker = message->show_ticker;
     persist_write_bool(MESSAGE_KEY_TICKER_ON, this->show_ticker);
@@ -1629,6 +1649,7 @@ Window *watchface_window_create() {
     .show_battery_at_percent = persist_read_int_or_default(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, 40),
     .hand_style = persist_read_int_or_default(MESSAGE_KEY_HAND_STYLE, 1),
     .temperature_font_size = persist_read_int_or_default(MESSAGE_KEY_TEMPERATURE_SIZE, 2),
+    .ticker_font_size = 2,
     .bg_color = persist_read_int_or_default(MESSAGE_KEY_BG_COLOR, 0x000055),    // OxfordBlue
     .fg1_color = persist_read_int_or_default(MESSAGE_KEY_FG1_COLOR, 0xAAAA55),  // Brass
     .fg2_color = persist_read_int_or_default(MESSAGE_KEY_FG2_COLOR, 0xFFFF55),  //  Iterine

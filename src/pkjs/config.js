@@ -224,7 +224,7 @@ module.exports = [
          {
           "type": "toggle",
           "messageKey": "KEY_TICKER_ON",
-          "label": "Enable Cryptocurrency Ticker",
+          "label": "Show Ticker",
           "defaultValue": true
          },
          {
