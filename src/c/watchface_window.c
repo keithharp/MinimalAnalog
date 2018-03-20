@@ -142,6 +142,7 @@ typedef struct {
 #define MESSAGE_KEY_SECONDS_HAND_DURATION 18
 #define MESSAGE_KEY_WEATHER_SOURCE 19
 #define MESSAGE_KEY_SHOW_TIMEZONE 20
+#define MESSAGE_KEY_TICKER_ON 26
 
 // Message types.
 #define MESSAGE_TYPE_READY 0
@@ -156,7 +157,6 @@ typedef struct {
 // Ticker settings
 #define MESSAGE_KEY_COIN 24
 #define MESSAGE_KEY_CURRENCY 25
-#define TICKER_ON 26
 
 // Weather sources  -- Yahoo stopped working for me as of 8/23/2016.  Appears to be a problem with converting lat/long to WOEID
 #define WEATHER_SOURCE_OPENWEATHERMAP 1
@@ -748,7 +748,7 @@ static void send_weather_request(void *watchface_window) {
     dict_write_int32(iterator, KEY_MESSAGE_ID, ++this->expected_weather_message_id);
     dict_write_int32(iterator, MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
     dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
-    dict_write_int32(iterator, TICKER_ON, this->show_ticker);
+    dict_write_int32(iterator, MESSAGE_KEY_TICKER_ON, this->show_ticker);
     APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i and source = %d", this->temperature_units, this->weather_source);
     if (this->show_ticker) {
       dict_write_int32(iterator, KEY_MESSAGE_ID1, ++this->expected_ticker_message_id);
@@ -1388,7 +1388,7 @@ static void settings_received(void *watchface_window, Message const *message) {
   
   if (this->show_ticker != message->show_ticker) {
     this->show_ticker = message->show_ticker;
-    persist_write_bool(TICKER_ON, this->show_ticker);
+    persist_write_bool(MESSAGE_KEY_TICKER_ON, this->show_ticker);
     update_ticker(watchface_window, "");
   }
   
@@ -1519,6 +1519,9 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         break;
       case KEY_TICKER:
         message.ticker = tuple->value->cstring;
+        break;
+      case MESSAGE_KEY_TICKER_ON:
+        message.show_ticker = tuple->value->int32;
         break;
       case MESSAGE_KEY_COIN:
         message.coin = atoi(tuple->value->cstring);
@@ -1684,7 +1687,7 @@ Window *watchface_window_create() {
     .weather_update_backoff_interval = -1,
     .expected_weather_message_id = 0,
     
-    .show_ticker = persist_read_bool_or_default(TICKER_ON, true),
+    .show_ticker = persist_read_bool_or_default(MESSAGE_KEY_TICKER_ON, true),
     .ticker_update_timer = NULL,
     .ticker_update_backoff_interval = -1,
     .expected_ticker_message_id = 0,
