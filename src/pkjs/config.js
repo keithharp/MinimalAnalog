@@ -281,6 +281,14 @@ module.exports = [
                "label": "nzd", 
                "value": "4"
              },
+             { 
+               "label": "eur", 
+               "value": "5"
+             },
+             { 
+               "label": "pnd", 
+               "value": "6"
+             },
            ]
          },   
        ]

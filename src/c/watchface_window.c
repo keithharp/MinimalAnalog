@@ -56,8 +56,6 @@
  *   - Use Quiet Time as the time to avoid weather updates rather than (or in addition to) fixed times - Not possible with current APIs
  *
  * TODO:
- *   - Allow decimal support in coin dollar value.
- *   - Abbreiviate 10000 to 10K in coin dollar value
  *   - Allow font selection for coin ticker
  *
  * Sean Ullyatt - sullyatt@gmail.com
@@ -326,7 +324,7 @@ typedef struct {
   char date_text[sizeof("Jan 31")];
 
   TextLayer *ticker_text_layer;
-  char ticker_text[9];
+  char ticker_text[7];
 
   TextLayer *temperature_text_layer;
   char temperature_text[sizeof("-999°")];
@@ -1030,12 +1028,6 @@ GFont get_weather_font(WatchfaceWindow *this) {
 
 }
 
-GFont get_ticker_font(WatchfaceWindow *this) {
-      if (this->font_ticker_small == NULL)
-         this->font_ticker_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
-      return this->font_ticker_small;
-}
- 
 static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_font, GColor layer_color) {
   TextLayer *new_text_layer = text_layer_create(layer_bounds);
   text_layer_set_font(new_text_layer, layer_font);
@@ -1152,7 +1144,8 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->font_hours = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_24));
   this->font_date = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_15));
-  this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
+  //this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
+  this->font_ticker = fonts_get_system_font(FONT_KEY_GOTHIC_18);
   this->font_temperature_small = NULL;
   this->font_temperature = get_weather_font(this);
   this->font_ticker_small = NULL;
@@ -1172,7 +1165,7 @@ static void watchface_window_load(Window *watchface_window) {
   this->date_text_layer = watchface_text_layer_create(GRect(midX - 30, midY*2- 50, 60, 20), this->font_date, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->date_text_layer));
     
-  this->ticker_text_layer = watchface_text_layer_create(GRect(midX +9, midY - 21, 50, 30), this->font_ticker, this->color_foreground_1);
+  this->ticker_text_layer = watchface_text_layer_create(GRect(midX +12, midY - 21, 50, 30), this->font_ticker, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->ticker_text_layer));
 
   this->temperature_text_layer = watchface_text_layer_create(GRect(midX/4, midY + 6, 44, 20), this->font_temperature, this->color_foreground_1);

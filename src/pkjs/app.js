@@ -24,6 +24,8 @@ var TICKER_COIN_ECC = 6;
 var TICKER_CURRENCY_AUD = 2;
 var TICKER_CURRENCY_CAN = 3;
 var TICKER_CURRENCY_NZD = 4;
+var TICKER_CURRENCY_EUR = 5;
+var TICKER_CURRENCY_PND = 6;
 
 var WEATHER_SOURCE_OPENWEATHERMAP = 1;
 var WEATHER_SOURCE_YAHOO = 2;
@@ -108,6 +110,12 @@ function parseCurrency(currency) {
       case TICKER_CURRENCY_NZD:
           currencyS = "nzd";
           break;
+      case TICKER_CURRENCY_EUR:
+          currencyS = "eur";
+          break;
+      case TICKER_CURRENCY_PND:
+          currencyS = "pnd";
+          break;
       default:
           currencyS = "usd";
   }
@@ -147,28 +155,32 @@ function writeToLocalStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+function getRepString (rep) {
+  if (rep < 1000) {
+    return rep; // return the same number
+  }
+  if (rep < 10000) { // place a comma between
+    return rep.charAt(0) + ',' + rep.substring(1);
+  }
+  // divide and format
+  return (rep/1000).toFixed(rep % 1000 != 0)+'k';
+}
+
 function queryCoin(messageId, coin, currency) {
   var currencyS = parseCurrency(currency);
   
   var url = 'https://api.coinmarketcap.com/v1/ticker/'+parseCoin(coin)+'/?convert='+currencyS.toUpperCase()+'&limit=1';
     console.log ("requesting "+url);
     sendXhr(url, 'GET', function(responseText) {
-    var responseJson = JSON.parse(responseText);
+      var responseJson = JSON.parse(responseText);
+      var price = responseJson[0]['price_'+currencyS.toLowerCase()];
+      price = getRepString(price);
       console.log("Ticker:  "+responseJson[0].price_aud);
-      /* TODO
-        Format value
-        0.1234
-        10.123
-        100.12
-        1234
-        10K
-        10.1K
-        Update font to include $ K . and maybe pound/euro?
-      */
+
       Pebble.sendAppMessage({
           'KEY_MESSAGE_TYPE': MESSAGE_TYPE_TICKER,
           'KEY_MESSAGE_ID1' : messageId,
-          'KEY_TICKER': responseJson[0]['price_'+currencyS.toLowerCase()]
+          'KEY_TICKER': price
       });
       
   });
@@ -255,7 +267,6 @@ Pebble.addEventListener('appmessage', function(event) {
       //console.log("event = "+ str);
       console.log("PebbleKit JS sending weather request with with message id of " + event.payload['KEY_MESSAGE_ID'] + " and units of " + event.payload['TEMPERATURE_UNITS'] + "and weather source of " + event.payload['WEATHER_SOURCE']);
       sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS'], event.payload['WEATHER_SOURCE']);
-      console.log("ticker "+ event.payload['KEY_TICKER_ON']);
       if (event.payload['KEY_TICKER_ON']) {
         console.log("PebbleKit JS sending ticker request with with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
         queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY']);
