@@ -9,4 +9,5 @@ Pebble Watch Face
 
 ![Alt text](screenshots/config.png?raw=true "Config")
 
-Bitcoin donations 13MjTPDFQtxv1u1sWURkDduFSw97KbMfsS
+Donations | Bitcoin 3Dr7HHJEd5sNyht9J8gi5dN6QoUnxRdjZW | Ethereum Classic 0x3F45Ba445B5738E709A2A28c3A199B800eEb96Fc
+
