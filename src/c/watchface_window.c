@@ -1163,7 +1163,7 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->font_hours = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_24));
   this->font_date = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_15));
-  this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
+  this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_13));
   //this->font_ticker = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_12));
   //this->font_ticker = fonts_get_system_font(FONT_KEY_GOTHIC_18);
   this->font_temperature_small = NULL;

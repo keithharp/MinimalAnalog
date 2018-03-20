@@ -163,7 +163,7 @@ function getRepString (rep) {
     return rep.charAt(0) + ',' + rep.substring(1);
   }
   // divide and format
-  return (rep/1000).toFixed(rep % 1000 != 0)+'k';
+  return (rep/1000).toFixed(rep % 1000 != 0)+'K';
 }
 
 function queryCoin(messageId, coin, currency) {
