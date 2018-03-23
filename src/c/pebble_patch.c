@@ -13,7 +13,7 @@ int32_t persist_read_int_or_default(uint32_t key, int32_t default_value) {
 }
 
 char* persist_read_string_or_default(uint32_t key, char* default_value) {
-  char *buffer = malloc(sizeof(*buffer));
+  char *buffer = malloc(200);
   if ( persist_exists(key) ) {
     persist_read_string(key, buffer, sizeof(buffer));
     return buffer;

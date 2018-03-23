@@ -202,7 +202,6 @@ function queryString(messageId, url) {
 function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, position) {
 
   var url;
-  //var myAPIKey = '31196cb8a000e808be9f27de97a6f2e1';
   if (weatherSource == WEATHER_SOURCE_YAHOO)
   {
     var query = encodeURIComponent('select astronomy, item.condition, units.temperature from weather.forecast where woeid in (select place.woeid from flickr.places where api_key="a4cd191f6a5f639df681211751f8c74e" AND lat="' + position.coords.latitude + '" AND lon="' + position.coords.longitude + '")');
@@ -223,6 +222,9 @@ function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, posi
       });
     });
   } else {  // default to using OpenWeatherMap
+    if (myAPIKey == '') {
+      myAPIKey = '31196cb8a000e808be9f27de97a6f2e1';
+    } 
      // Construct URL
     url = 'http://api.openweathermap.org/data/2.5/weather?lat=' +
         position.coords.latitude + '&lon=' + position.coords.longitude + '&appid=' + myAPIKey;
