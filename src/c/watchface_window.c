@@ -5,8 +5,14 @@
  *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
  *   workaround is to go into an app and come back to the watchface.
  *
+ * Version 1.7 adds
+ *   - Ability to set your own OpenWeatherMap API Key
+ *   - Ability to pull your a string from the web, can be used like https://github.com/Zwater/zackwatch-public
+ *      You could run a script to populate this
+ *      This uses the timezone text lable so can currently only have one or the other on
+ *
  * Version 1.6 adds
- *   - initial cryptocurrency ticker support. Whole dollar value only.
+ *   - initial cryptocurrency ticker support.
  *
  * Version 1.5 adds
  *   - code cleanup on font to weather condition mapping to make it easier to read - DONE
