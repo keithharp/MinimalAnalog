@@ -10,5 +10,6 @@
 
 bool persist_read_bool_or_default(uint32_t key, bool default_value);
 int32_t persist_read_int_or_default(uint32_t key, int32_t default_value);
+char* persist_read_string_or_default(uint32_t key, char* default_value);
 
 struct tm* local_time_peek();

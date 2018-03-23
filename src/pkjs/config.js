@@ -115,7 +115,13 @@ module.exports = [
                "value": "2"
              }
            ]
-         },   
+         },
+         {
+          "type": "input",
+          "messageKey": "KEY_OPENWM_API",
+          "label": "OpenWeatherMap API KEY",
+           "defaultValue" : "31196cb8a000e808be9f27de97a6f2e1"
+         }
        ]
       },
     {
@@ -219,6 +225,25 @@ module.exports = [
        "items": [
          {
            "type": "heading",
+           "defaultValue" : "String Settings"
+         },
+         {
+          "type": "toggle",
+          "messageKey": "KEY_STRING_ON",
+          "label": "Fetch String",
+          "defaultValue": false
+         },
+         {
+          "type": "input",
+          "messageKey": "KEY_STRING_URL",
+          "label": "URL to fetch"
+         }
+         ]
+    },
+    { "type": "section",
+       "items": [
+         {
+           "type": "heading",
            "defaultValue" : "Ticker Settings"
          },
          {
@@ -228,7 +253,7 @@ module.exports = [
           "defaultValue": true
          },
          {
-           "type": "radiogroup",
+           "type": "select",
            "messageKey": "COIN",
            "label": "Coin",
            "defaultValue" : "1",
@@ -260,7 +285,7 @@ module.exports = [
            ]
          },
          {
-           "type": "radiogroup",
+           "type": "select",
            "messageKey": "CURRENCY",
            "label": "Currency",
            "defaultValue" : "1",
