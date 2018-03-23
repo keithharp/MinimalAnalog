@@ -85,6 +85,11 @@ typedef struct {
        char* ticker; 
     };
 
+    struct {
+      int message_id2;
+      char* stringS;
+    };
+    
     // Settings message.
     struct {
       int seconds_hand_mode;
@@ -107,6 +112,9 @@ typedef struct {
       int coin;
       int currency;
       bool show_ticker;
+      bool show_string;
+      char* string_url;
+      char* openwm_api;
     };
   };
 } Message;
@@ -124,6 +132,9 @@ typedef struct {
 #define KEY_TICKER 21
 #define KEY_MESSAGE_ID1 23
 
+// Keys in string message
+#define KEY_STRING 29
+#define KEY_MESSAGE_ID2 28
 // Keys used in settings message.
 #define MESSAGE_KEY_SHOW_SECONDS_HAND 5
 #define MESSAGE_KEY_TEMPERATURE_UNITS 6
@@ -142,12 +153,16 @@ typedef struct {
 #define MESSAGE_KEY_WEATHER_SOURCE 19
 #define MESSAGE_KEY_SHOW_TIMEZONE 20
 #define MESSAGE_KEY_TICKER_ON 26
+#define MESSAGE_KEY_STRING_ON 27
+#define MESSAGE_KEY_STRING_URL 30
+#define MESSAGE_KEY_OPENWM_API 31
 
 // Message types.
 #define MESSAGE_TYPE_READY 0
 #define MESSAGE_TYPE_WEATHER 1
 #define MESSAGE_TYPE_SETTINGS 2
 #define MESSAGE_TYPE_TICKER 3
+#define MESSAGE_TYPE_STRING 4
 
 // Temperature units.
 #define TEMPERATURE_UNITS_CELSIUS 0
@@ -170,7 +185,6 @@ typedef struct {
 #define SECONDS_HAND_FOR_FIXED_DURATION_ON 0xd      // binary 1101 or 13
 #define SECONDS_HAND_TOGGLE_TAP_OFF 0x6             // binary 0110 or 6
 #define SECONDS_HAND_TOGGLE_TAP_ON 0xe              // binary 1110 or 15
-
 
 // Condition codes.
 // Reference: https://developer.yahoo.com/weather/documentation.html#codes
@@ -293,6 +307,7 @@ typedef struct {
   
   bool show_timezone;
   bool show_ticker;
+  bool show_string;
   
   GFont font_hours;
   GFont font_date;
@@ -357,6 +372,12 @@ typedef struct {
   AppTimer *ticker_update_timer;
   int ticker_update_backoff_interval;
   int expected_ticker_message_id;
+  
+  AppTimer *string_update_timer;
+  int string_update_backoff_interval;
+  int expected_string_message_id;
+  char* string_url;
+  char* openwm_api;
 } WatchfaceWindow;
 
 static Window *g_watchface_window = NULL;
@@ -412,7 +433,9 @@ static void update_ticker(Window *watchface_window, char* ticker) {
 
   GRect ticker_text_layer_frame = layer_get_frame(text_layer_get_layer(this->ticker_text_layer));
   char const *format;
-  format = "$%s";
+  if (strcmp(ticker, "") != 0) {
+    format = "$%s";
+  } else { format = ""; }
   snprintf(this->ticker_text, sizeof(this->ticker_text), format, ticker);
   text_layer_set_text(this->ticker_text_layer, this->ticker_text);
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Updating Ticker to : %s", this->ticker_text);
@@ -696,6 +719,17 @@ static void cancel_ticker_update_timer(WatchfaceWindow* this) {
   }
 }
 
+static void cancel_string_update_timer(WatchfaceWindow* this) {
+  
+   // In case there is already a timer, turn it off
+  if (this->string_update_timer) {
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "getting ready to close weather_timer");
+    app_timer_cancel(this->string_update_timer);
+    this->string_update_timer = NULL;
+    //APP_LOG(APP_LOG_LEVEL_DEBUG, "done with resetting timer");
+  }
+}
+
 static void cancel_weather_update_timer(WatchfaceWindow* this) {
   
    // In case there is already a timer, turn it off
@@ -749,11 +783,19 @@ static void send_weather_request(void *watchface_window) {
     dict_write_int32(iterator, MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
     dict_write_int32(iterator, MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
     dict_write_int32(iterator, MESSAGE_KEY_TICKER_ON, this->show_ticker);
+    dict_write_int32(iterator, MESSAGE_KEY_STRING_ON, this->show_string);
+    if (this->weather_source == WEATHER_SOURCE_OPENWEATHERMAP) {
+      dict_write_cstring(iterator, MESSAGE_KEY_OPENWM_API, this->openwm_api);
+    }
     APP_LOG(APP_LOG_LEVEL_DEBUG, "In C function send_weather_request temperature units : %i and source = %d", this->temperature_units, this->weather_source);
     if (this->show_ticker) {
       dict_write_int32(iterator, KEY_MESSAGE_ID1, ++this->expected_ticker_message_id);
       dict_write_int32(iterator, MESSAGE_KEY_COIN, this->ticker_coin);
       dict_write_int32(iterator, MESSAGE_KEY_CURRENCY, this->ticker_currency);
+    }
+    if (this->show_string) {
+      dict_write_int32(iterator, KEY_MESSAGE_ID2, ++this->expected_string_message_id);
+      dict_write_cstring(iterator, MESSAGE_KEY_STRING_URL, this->string_url);
     }
     if ((result = app_message_outbox_send()) != APP_MSG_OK) 
       log_reason("unable to send outbox", result);
@@ -959,7 +1001,7 @@ static void update_time(Window *watchface_window, struct tm *local_time) {
     if (local_time->tm_min == 0 && local_time->tm_hour == 0) { // Midnight
         update_date(watchface_window);
     }
-    
+//     https://cloudpebble.net/ide/project/422981#
 #if 0
     // this is for testing updates... comment out for actual releases  ... provides update every 5 minutes
    APP_LOG(APP_LOG_LEVEL_DEBUG, "countdown to weather update %d", local_time->tm_min % 5);
@@ -1141,17 +1183,13 @@ static void tap_received(AccelAxisType axis, int32_t direction) {
         APP_LOG(APP_LOG_LEVEL_ERROR, "received tap when state does not expect one.  Current mode = %02x", this->seconds_hand_mode);
       break;
     }
-    
     force_immediate_time_update(g_watchface_window, bUpdateTime, bUpdateTickTimerService, bUpdateDurationTimer);
   }
-  
 }
-
 
 static void tap_service_subscribe(WatchfaceWindow* this) {
     accel_tap_service_subscribe(tap_received);
 }
-
 
 static void watchface_window_load(Window *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
@@ -1255,7 +1293,8 @@ static void watchface_window_unload(Window *watchface_window) {
   }
   
   cancel_weather_update_timer(this);
-    cancel_ticker_update_timer(this);
+  cancel_ticker_update_timer(this);
+  cancel_string_update_timer(this);
 
   gpath_destroy(this->hour_hand_path);
   gpath_destroy(this->minute_hand_path);
@@ -1319,7 +1358,7 @@ static void watchface_window_unload(Window *watchface_window) {
 }
 
 static void ready_received(void *watchface_window) {
-  do_async_weather_update(watchface_window);;
+  do_async_weather_update(watchface_window);
   update_date(watchface_window);
 }
 
@@ -1344,7 +1383,17 @@ static void ticker_received(void *watchface_window, Message const *message) {
   }
 }
 
+static void string_received(void *watchface_window, Message const *message) {
+  WatchfaceWindow *this = window_get_user_data(watchface_window);
 
+  if (message->message_id2 == this->expected_string_message_id) {
+    cancel_string_update_timer(this);
+
+    update_timezone(watchface_window, message->stringS);
+  }
+}
+
+  
 static void settings_received(void *watchface_window, Message const *message) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   
@@ -1403,7 +1452,25 @@ static void settings_received(void *watchface_window, Message const *message) {
     this->show_ticker = message->show_ticker;
     persist_write_bool(MESSAGE_KEY_TICKER_ON, this->show_ticker);
     update_ticker(watchface_window, "");
+    bUpdateWeather = true;
   }
+  
+  if (this->show_string != message->show_string) {
+    this->show_string = message->show_string;
+    persist_write_bool(MESSAGE_KEY_STRING_ON, this->show_string);
+    update_timezone(watchface_window, "");
+    bUpdateWeather = true;
+  }
+  
+ if (this->openwm_api != message->openwm_api) {
+    this->openwm_api = message->openwm_api;
+    persist_write_string(MESSAGE_KEY_OPENWM_API, this->openwm_api);
+  }
+  
+ if (this->string_url != message->string_url) {
+    this->string_url = message->string_url;
+    persist_write_string(MESSAGE_KEY_STRING_URL, this->string_url);
+  }  
   
   if (this->show_battery_at_percent != message->show_battery_at_percent) {
     this->show_battery_at_percent = message->show_battery_at_percent;
@@ -1521,6 +1588,9 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
       case KEY_MESSAGE_ID1:
         message.message_id1 = tuple->value->int32;
         break;
+      case KEY_MESSAGE_ID2:
+        message.message_id1 = tuple->value->int32;
+        break;
       case KEY_CONDITION_CODE:
         message.condition_code = tuple->value->int32;
         break;
@@ -1535,6 +1605,18 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         break;
       case MESSAGE_KEY_TICKER_ON:
         message.show_ticker = tuple->value->int32;
+        set_clay_message(&message);
+        break;
+      case KEY_STRING:
+        message.stringS = tuple->value->cstring;
+        break;
+      case MESSAGE_KEY_STRING_URL:
+        message.string_url = tuple->value->cstring;
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_STRING_ON:
+        message.show_string = tuple->value->int32;
+        set_clay_message(&message);
         break;
       case MESSAGE_KEY_COIN:
         message.coin = atoi(tuple->value->cstring);
@@ -1542,6 +1624,10 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         break;
       case MESSAGE_KEY_CURRENCY:
         message.currency = atoi(tuple->value->cstring);
+        set_clay_message(&message);
+        break;
+      case MESSAGE_KEY_OPENWM_API:
+        message.openwm_api = tuple->value->cstring;
         set_clay_message(&message);
         break;
       case MESSAGE_KEY_SHOW_SECONDS_HAND:
@@ -1627,6 +1713,9 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
     case MESSAGE_TYPE_TICKER:
       ticker_received(watchface_window, &message);
       break;
+    case MESSAGE_TYPE_STRING:
+      string_received(watchface_window, &message);
+      break;
     default:
       APP_LOG(APP_LOG_LEVEL_ERROR, "Application received message of unknown type: %d ", message.message_type);
       break;
@@ -1705,7 +1794,14 @@ Window *watchface_window_create() {
     .ticker_update_timer = NULL,
     .ticker_update_backoff_interval = -1,
     .expected_ticker_message_id = 0,
+    .show_string = persist_read_bool_or_default(MESSAGE_KEY_STRING_ON, false),
+    .expected_string_message_id = 0,
+    .string_update_timer = NULL,
+    .string_update_backoff_interval = -1,
+    .openwm_api = persist_read_string_or_default(MESSAGE_KEY_OPENWM_API,"31196cb8a000e808be9f27de97a6f2e1"),
+    .string_url = persist_read_string_or_default(MESSAGE_KEY_STRING_URL,""),
   };
+  
   window_set_user_data(watchface_window, this);
 
   window_set_window_handlers(watchface_window, (WindowHandlers) {
@@ -1714,7 +1810,7 @@ Window *watchface_window_create() {
     .disappear = watchface_window_disappear,
     .unload = watchface_window_unload
   });
-
+  
   app_message_set_context(watchface_window);
   app_message_register_inbox_received(inbox_received);
   app_message_register_outbox_sent(outbox_sent);

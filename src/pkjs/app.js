@@ -12,6 +12,7 @@ var MESSAGE_TYPE_READY = 0;
 var MESSAGE_TYPE_WEATHER = 1;
 var MESSAGE_TYPE_SETTINGS = 2;
 var MESSAGE_TYPE_TICKER = 3;
+var MESSAGE_TYPE_STRING = 4;
 // Temperature units.
 var TEMPERATURE_UNITS_CELSIUS = 0;
 var TEMPERATURE_UNITS_FAHRENHEIT = 1;
@@ -170,12 +171,12 @@ function queryCoin(messageId, coin, currency) {
   var currencyS = parseCurrency(currency);
   
   var url = 'https://api.coinmarketcap.com/v1/ticker/'+parseCoin(coin)+'/?convert='+currencyS.toUpperCase()+'&limit=1';
-    console.log ("requesting "+url);
+    console.log ("requesting " + url);
     sendXhr(url, 'GET', function(responseText) {
       var responseJson = JSON.parse(responseText);
       var price = responseJson[0]['price_'+currencyS.toLowerCase()];
       price = getRepString(price);
-      console.log("Ticker:  "+responseJson[0].price_aud);
+      console.log("Ticker:  "+ price);
 
       Pebble.sendAppMessage({
           'KEY_MESSAGE_TYPE': MESSAGE_TYPE_TICKER,
@@ -186,10 +187,22 @@ function queryCoin(messageId, coin, currency) {
   });
 }
 
-function queryWeather(messageId, temperatureUnits, weatherSource, position) {
+function queryString(messageId, url) {
+  console.log ("requesting " + url);
+  sendXhr(url, 'GET', function(responseText) {
+    console.log ("String:  "+ responseText);
+    Pebble.sendAppMessage({
+          'KEY_MESSAGE_TYPE': MESSAGE_TYPE_STRING,
+          'KEY_MESSAGE_ID2' : messageId,
+          'KEY_STRING': responseText
+      });
+  });
+}
+
+function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, position) {
 
   var url;
-  var myAPIKey = '31196cb8a000e808be9f27de97a6f2e1';
+  //var myAPIKey = '31196cb8a000e808be9f27de97a6f2e1';
   if (weatherSource == WEATHER_SOURCE_YAHOO)
   {
     var query = encodeURIComponent('select astronomy, item.condition, units.temperature from weather.forecast where woeid in (select place.woeid from flickr.places where api_key="a4cd191f6a5f639df681211751f8c74e" AND lat="' + position.coords.latitude + '" AND lon="' + position.coords.longitude + '")');
@@ -213,7 +226,7 @@ function queryWeather(messageId, temperatureUnits, weatherSource, position) {
      // Construct URL
     url = 'http://api.openweathermap.org/data/2.5/weather?lat=' +
         position.coords.latitude + '&lon=' + position.coords.longitude + '&appid=' + myAPIKey;
-  
+    console.log ("requesting " + url);
     // Send request to OpenWeatherMap
     sendXhr(url, 'GET', 
       function(responseText) {
@@ -243,10 +256,10 @@ function onPositionError(error) {
   console.log("Failed to obtain geographical location.");
 }
 
-function sendWeatherRequest(messageID, temperatureUnits, weatherSource) {
+function sendWeatherRequest(messageID, temperatureUnits, weatherSource, myAPIKey) {
   // KH:  Looked into Sean's suggestion to be notified of position updates instead of polling, but that
   //  appeared to use more battery as the updates were constantly coming in.
-  navigator.geolocation.getCurrentPosition(queryWeather.bind(null, messageID, temperatureUnits, weatherSource), onPositionError, {
+  navigator.geolocation.getCurrentPosition(queryWeather.bind(null, messageID, temperatureUnits, weatherSource, myAPIKey), onPositionError, {
     timeout: 15000,
     maximumAge: 1000 * 60 * 60 * 8
   });
@@ -265,11 +278,15 @@ Pebble.addEventListener('appmessage', function(event) {
     case MESSAGE_TYPE_WEATHER:
       //var str = JSON.stringify(event);
       //console.log("event = "+ str);
-      console.log("PebbleKit JS sending weather request with with message id of " + event.payload['KEY_MESSAGE_ID'] + " and units of " + event.payload['TEMPERATURE_UNITS'] + "and weather source of " + event.payload['WEATHER_SOURCE']);
-      sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS'], event.payload['WEATHER_SOURCE']);
+      console.log("PebbleKit JS sending weather request with message id of " + event.payload['KEY_MESSAGE_ID'] + " and units of " + event.payload['TEMPERATURE_UNITS'] + " and weather source of " + event.payload['WEATHER_SOURCE']+" and openwm api key of " + event.payload['KEY_OPENWM_API']);
+      sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS'], event.payload['WEATHER_SOURCE'], event.payload['KEY_OPENWM_API']);
       if (event.payload['KEY_TICKER_ON']) {
-        console.log("PebbleKit JS sending ticker request with with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
+        console.log("PebbleKit JS sending ticker request with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
         queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY']);
+      }
+      if (event.payload['KEY_STRING_ON']) {
+        console.log("PebbleKit JS sending String request with message id of " + event.payload['KEY_MESSAGE_ID2'] + " and url " + event.payload['KEY_STRING_URL']);
+        queryString(event.payload['KEY_MESSAGE_ID2'],event.payload['KEY_STRING_URL']);
       }
       break; 
     default:

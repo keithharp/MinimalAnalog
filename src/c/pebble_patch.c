@@ -12,6 +12,16 @@ int32_t persist_read_int_or_default(uint32_t key, int32_t default_value) {
   return persist_exists(key) ? persist_read_int(key) : default_value;
 }
 
+char* persist_read_string_or_default(uint32_t key, char* default_value) {
+  char *buffer = malloc(sizeof(*buffer));
+  if ( persist_exists(key) ) {
+    persist_read_string(key, buffer, sizeof(buffer));
+    return buffer;
+  } else {
+    return default_value;
+  }
+}
+
 struct tm* local_time_peek() {
   time_t utc_time = time(NULL);
   return localtime(&utc_time);
