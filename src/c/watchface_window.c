@@ -119,8 +119,8 @@ typedef struct {
       int currency;
       bool show_ticker;
       bool show_string;
-      char* string_url;
-      char* openwm_api;
+      char *string_url;
+      char *openwm_api;
     };
   };
 } Message;
@@ -1471,11 +1471,13 @@ static void settings_received(void *watchface_window, Message const *message) {
  if (this->openwm_api != message->openwm_api) {
     this->openwm_api = message->openwm_api;
     persist_write_string(MESSAGE_KEY_OPENWM_API, this->openwm_api);
+    bUpdateWeather = true;
   }
   
  if (this->string_url != message->string_url) {
     this->string_url = message->string_url;
     persist_write_string(MESSAGE_KEY_STRING_URL, this->string_url);
+    bUpdateWeather = true;
   }  
   
   if (this->show_battery_at_percent != message->show_battery_at_percent) {

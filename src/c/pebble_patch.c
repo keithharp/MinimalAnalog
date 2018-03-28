@@ -12,11 +12,13 @@ int32_t persist_read_int_or_default(uint32_t key, int32_t default_value) {
   return persist_exists(key) ? persist_read_int(key) : default_value;
 }
 
+// why is this sometimes only first 3 characters
 char* persist_read_string_or_default(uint32_t key, char* default_value) {
-  char *buffer = malloc(200);
+  static char buffer[200];
   if ( persist_exists(key) ) {
+    //snprintf(s_buffer, sizeof(s_buffer), "Location: %s", location_name);
     persist_read_string(key, buffer, sizeof(buffer));
-    return buffer;
+    return (char*)buffer;
   } else {
     return default_value;
   }
