@@ -119,8 +119,8 @@ typedef struct {
       int currency;
       bool show_ticker;
       bool show_string;
-      char* string_url;
-      char* openwm_api;
+      char *string_url;
+      char *openwm_api;
     };
   };
 } Message;
