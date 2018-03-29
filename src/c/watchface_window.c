@@ -1807,7 +1807,7 @@ Window *watchface_window_create() {
     .string_update_timer = NULL,
     .string_update_backoff_interval = -1,
     .openwm_api = persist_read_string_or_default(MESSAGE_KEY_OPENWM_API,"31196cb8a000e808be9f27de97a6f2e1"),
-    .string_url = persist_read_string_or_default(MESSAGE_KEY_STRING_URL,""),
+    .string_url = persist_read_string_or_default1(MESSAGE_KEY_STRING_URL,""),
   };
   
   window_set_user_data(watchface_window, this);
