@@ -10,7 +10,7 @@ var clay = new Clay(clayConfig);
 // Message types.
 var MESSAGE_TYPE_READY = 0;
 var MESSAGE_TYPE_WEATHER = 1;
-var MESSAGE_TYPE_SETTINGS = 2;
+//var MESSAGE_TYPE_SETTINGS = 2;
 var MESSAGE_TYPE_TICKER = 3;
 var MESSAGE_TYPE_STRING = 4;
 // Temperature units.
@@ -28,7 +28,7 @@ var TICKER_CURRENCY_NZD = 4;
 var TICKER_CURRENCY_EUR = 5;
 var TICKER_CURRENCY_PND = 6;
 
-var WEATHER_SOURCE_OPENWEATHERMAP = 1;
+//var WEATHER_SOURCE_OPENWEATHERMAP = 1;
 var WEATHER_SOURCE_YAHOO = 2;
 
 function sendXhr(url, http_method, callback) {
@@ -174,7 +174,10 @@ function queryCoin(messageId, coin, currency) {
     console.log ("requesting " + url);
     sendXhr(url, 'GET', function(responseText) {
       var responseJson = JSON.parse(responseText);
-      var price = responseJson[0]['price_'+currencyS.toLowerCase()];
+      var price = 0;
+      if (typeof responseJson[0] != "undefined") {
+        price = responseJson[0]['price_'+currencyS.toLowerCase()];
+      }
       price = getRepString(price);
       console.log("Ticker:  "+ price);
 
@@ -210,7 +213,10 @@ function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, posi
   
     sendXhr(url, 'GET', function(responseText) {
       var responseJson = JSON.parse(responseText);
-      var channel = responseJson.query.results.channel;
+      var channel = null;
+      if (typeof responseJson.query.results != "undefined") {
+        channel = responseJson.query.results.channel;
+      }
       var now = Date.now();
   
       Pebble.sendAppMessage({
@@ -234,19 +240,28 @@ function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, posi
       function(responseText) {
         // responseText contains a JSON object with weather info
         var json = JSON.parse(responseText);
+        var sunrise = null;
+        var sunset = null;
+        var condition = null;
+        var temp = null;
         var nowseconds = Date.now() / 1000;  // now returns in ms, but OpenWeatherMap returns sunrise and sunset in seconds.
-        var sunrise = parseInt(json.sys.sunrise);
-        var sunset = parseInt(json.sys.sunset);
-        
+        if (typeof json.sys != "undefined") {
+          sunrise = parseInt(json.sys.sunrise);
+          sunset = parseInt(json.sys.sunset);
+        }
+        if (typeof json.weather[0] != "undefined") {
+          condition = json.weather[0].id;
+        }
+        if (typeof json.main != "undefined") {
+          temp = json.main.temp;
+        }
         Pebble.sendAppMessage({
           'KEY_MESSAGE_TYPE': MESSAGE_TYPE_WEATHER,
           'KEY_MESSAGE_ID': messageId,
-          'KEY_CONDITION_CODE': parseInt(json.weather[0].id, 10),
-          'KEY_TEMPERATURE': parseTemperature(json.main.temp, "K", temperatureUnits),
+          'KEY_CONDITION_CODE': parseInt(condition, 10),
+          'KEY_TEMPERATURE': parseTemperature(temp, "K", temperatureUnits),
           'KEY_IS_DAYLIGHT': +(sunrise <= nowseconds && nowseconds <= sunset)
-         
         });
-  
       }      
     );
       
