@@ -78,14 +78,14 @@
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[-a-zA-Z0-9\u00b0]",
+                    "characterRegex": "[-a-zA-Z0-9°]",
                     "file": "fonts/Epitet-Regular.ttf",
                     "name": "FONT_EPITET_REGULAR_15",
                     "targetPlatforms": null,
                     "type": "font"
                 },
                 {
-                    "characterRegex": "[- 0-9\u00b0]",
+                    "characterRegex": "[- 0-9°]",
                     "file": "fonts/Epitet-Regular.ttf",
                     "name": "FONT_EPITET_REGULAR_12",
                     "targetPlatforms": null,
