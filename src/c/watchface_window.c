@@ -238,8 +238,15 @@ static void update_background(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, this->color_background);
   graphics_context_set_stroke_color(ctx, this->color_foreground_1);
   graphics_fill_rect(ctx, layer_get_bounds(layer), 0, GCornerNone);
-
+#if defined(PBL_ROUND)
+  int16_t ray_length = bounds.size.h/2 - 2;
+  int16_t top = -3;
+  int16_t left= 2;
+#else
   int16_t ray_length = 111;
+  int16_t top = -5;
+  int16_t left= 1;
+#endif
   int ray_angles[8] = { 5, 10, 20, 25, 35, 40, 50, 55 };
 
   for (int i = 0; i < 8; ++i) {
@@ -263,10 +270,10 @@ static void update_background(Layer *layer, GContext *ctx) {
 
   // Draw hours
   graphics_context_set_text_color(ctx, this->color_foreground_1);
-  graphics_draw_text(ctx, "12", this->font_hours, GRect((bounds.size.w / 2) - 15, -5, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+  graphics_draw_text(ctx, "12", this->font_hours, GRect((bounds.size.w / 2) - 15, top, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
   graphics_draw_text(ctx, "3", this->font_hours, GRect(bounds.size.w - 31, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentRight, NULL);
   graphics_draw_text(ctx, "6", this->font_hours, GRect((bounds.size.w / 2) - 15, bounds.size.h - 26, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
-  graphics_draw_text(ctx, "9", this->font_hours, GRect(1, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+  graphics_draw_text(ctx, "9", this->font_hours, GRect(left, (bounds.size.h / 2) - 15, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
 }
 
 static void update_ticker(Window *watchface_window, char* ticker) {
