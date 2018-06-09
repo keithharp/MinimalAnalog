@@ -72,6 +72,7 @@
 #include "watchface_window.h"
 #include "pebble_patch.h"
 #include <limits.h>
+#include "keys.h"
 
 typedef struct {
   int message_type;
@@ -84,18 +85,18 @@ typedef struct {
       int temperature;
       bool is_daylight;
     };
-    
+
     // Ticker message.
     struct {
        int message_id1;
-       char* ticker; 
+       char* ticker;
     };
 
     struct {
       int message_id2;
       char* stringS;
     };
-    
+
     // Settings message.
     struct {
       int seconds_hand_mode;
@@ -125,181 +126,15 @@ typedef struct {
   };
 } Message;
 
-// Keys used in all messages.
-#define KEY_MESSAGE_TYPE 0
-
-// Keys used in weather message.
-#define KEY_MESSAGE_ID 1
-#define KEY_CONDITION_CODE 2
-#define KEY_TEMPERATURE 3
-#define KEY_IS_DAYLIGHT 4
-
-// Keys used in ticker message
-#define KEY_TICKER 21
-#define KEY_MESSAGE_ID1 23
-
-// Keys in string message
-#define KEY_STRING 29
-#define KEY_MESSAGE_ID2 28
-// Keys used in settings message.
-#define MESSAGE_KEY_SHOW_SECONDS_HAND 5
-#define MESSAGE_KEY_TEMPERATURE_UNITS 6
-#define MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT 7
-#define MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT 8
-#define MESSAGE_KEY_HAND_STYLE 9
-#define MESSAGE_KEY_BG_COLOR 10
-#define MESSAGE_KEY_FG1_COLOR 11
-#define MESSAGE_KEY_FG2_COLOR 12
-#define MESSAGE_KEY_FG3_COLOR 13
-#define MESSAGE_KEY_TEMPERATURE_SIZE 14
-#define MESSAGE_KEY_WEATHER_QUIET_TIME 15
-#define MESSAGE_KEY_WEATHER_QUIET_TIME_START 16
-#define MESSAGE_KEY_WEATHER_QUIET_TIME_STOP 17
-#define MESSAGE_KEY_SECONDS_HAND_DURATION 18
-#define MESSAGE_KEY_WEATHER_SOURCE 19
-#define MESSAGE_KEY_SHOW_TIMEZONE 20
-#define MESSAGE_KEY_TICKER_ON 26
-#define MESSAGE_KEY_STRING_ON 27
-#define MESSAGE_KEY_STRING_URL 30
-#define MESSAGE_KEY_OPENWM_API 31
-
-// Message types.
-#define MESSAGE_TYPE_READY 0
-#define MESSAGE_TYPE_WEATHER 1
-#define MESSAGE_TYPE_SETTINGS 2
-#define MESSAGE_TYPE_TICKER 3
-#define MESSAGE_TYPE_STRING 4
-
-// Temperature units.
-#define TEMPERATURE_UNITS_CELSIUS 0
-#define TEMPERATURE_UNITS_FAHRENHEIT 1
-
-// Ticker settings
-#define MESSAGE_KEY_COIN 24
-#define MESSAGE_KEY_CURRENCY 25
-
-// Weather sources  -- Yahoo stopped working for me as of 8/23/2016.  Appears to be a problem with converting lat/long to WOEID
-#define WEATHER_SOURCE_OPENWEATHERMAP 1
-#define WEATHER_SOURCE_YAHOO 2
-
-// state of how to handle seconds hand  -- 0x08 mask means show seconds hand   0x04 means we need to be registerd for the tap sensor
-#define SHOW_SECONDS_HAND(x)  (x & 0x8)
-#define TAP_SENSOR_NEEDED(x)  (x & 0x4)
-#define SECONDS_HAND_OFF 0x0                        // binary 0000 or 0
-#define SECONDS_HAND_ON 0x8                         // binary 1000 or 8
-#define SECONDS_HAND_FOR_FIXED_DURATION_OFF 0x5     // binary 0101 or 5
-#define SECONDS_HAND_FOR_FIXED_DURATION_ON 0xd      // binary 1101 or 13
-#define SECONDS_HAND_TOGGLE_TAP_OFF 0x6             // binary 0110 or 6
-#define SECONDS_HAND_TOGGLE_TAP_ON 0xe              // binary 1110 or 15
-
-// Condition codes.
-// Reference: https://developer.yahoo.com/weather/documentation.html#codes
-#define CONDITION_CODE_REFRESH -1
-#define CONDITION_CODE_TORNADO 0
-#define CONDITION_CODE_TROPICAL_STORM 1
-#define CONDITION_CODE_HURRICANE 2
-#define CONDITION_CODE_SEVERE_THUNDERSTORMS 3
-#define CONDITION_CODE_THUNDERSTORMS 4
-#define CONDITION_CODE_MIXED_RAIN_AND_SNOW 5
-#define CONDITION_CODE_MIXED_RAIN_AND_SLEET 6
-#define CONDITION_CODE_MIXED_SNOW_AND_SLEET 7
-#define CONDITION_CODE_FREEZING_DRIZZLE 8
-#define CONDITION_CODE_DRIZZLE 9
-#define CONDITION_CODE_FREEZING_RAIN 10
-#define CONDITION_CODE_SHOWERS 11
-#define CONDITION_CODE_SHOWERS_ALIAS 12
-#define CONDITION_CODE_SNOW_FLURRIES 13
-#define CONDITION_CODE_LIGHT_SNOW_SHOWERS 14
-#define CONDITION_CODE_BLOWING_SNOW 15
-#define CONDITION_CODE_SNOW 16
-#define CONDITION_CODE_HAIL 17
-#define CONDITION_CODE_SLEET 18
-#define CONDITION_CODE_DUST 19
-#define CONDITION_CODE_FOGGY 20
-#define CONDITION_CODE_HAZE 21
-#define CONDITION_CODE_SMOKY 22
-#define CONDITION_CODE_BLUSTERY 23
-#define CONDITION_CODE_WINDY 24
-#define CONDITION_CODE_COLD 25
-#define CONDITION_CODE_CLOUDY 26
-#define CONDITION_CODE_MOSTLY_CLOUDY_NIGHT 27
-#define CONDITION_CODE_MOSTLY_CLOUDY_DAY 28
-#define CONDITION_CODE_PARTLY_CLOUDY_NIGHT 29
-#define CONDITION_CODE_PARTLY_CLOUDY_DAY 30
-#define CONDITION_CODE_CLEAR_NIGHT 31
-#define CONDITION_CODE_SUNNY 32
-#define CONDITION_CODE_FAIR_NIGHT 33
-#define CONDITION_CODE_FAIR_DAY 34
-#define CONDITION_CODE_MIXED_RAIN_AND_HAIL 35
-#define CONDITION_CODE_HOT 36
-#define CONDITION_CODE_ISOLATED_THUNDERSTORMS 37
-#define CONDITION_CODE_SCATTERED_THUNDERSTORMS 38
-#define CONDITION_CODE_SCATTERED_THUNDERSTORMS_ALIAS 39
-#define CONDITION_CODE_SCATTERED_SHOWERS 40
-#define CONDITION_CODE_HEAVY_SNOW 41
-#define CONDITION_CODE_SCATTERED_SNOW_SHOWERS 42
-#define CONDITION_CODE_HEAVY_SNOW_ALIAS 43
-#define CONDITION_CODE_PARTLY_CLOUDY 44
-#define CONDITION_CODE_THUNDERSHOWERS 45
-#define CONDITION_CODE_SNOW_SHOWERS 46
-#define CONDITION_CODE_ISOLATED_THUNDERSHOWERS 47
-
-// OpenWeatherMap condition codes:  http://openweathermap.org/weather-conditions
-#define OWM_CONDITION_CODE_THUNDERSTORM_MIN 200
-#define OWM_CONDITION_CODE_THUNDERSTORM_MAX 299
-#define OWM_CONDITION_CODE_RAIN_MIN 300
-#define OWM_CONDITION_CODE_RAIN_MAX 599
-#define OWM_CONDITION_CODE_SNOW_MIN 600
-#define OWM_CONDITION_CODE_LIGHT_RAIN_AND_SNOW 615
-#define OWM_CONDITION_CODE_RAIN_AND_SNOW 616
-#define OWM_CONDITION_CODE_SNOW_MAX 699
-#define OWM_CONDITION_CODE_ATMOSPHERE_MIN 700
-#define OWM_CONDITION_CODE_ATMOSPHERE_MAX 799
-#define OWM_CONDITION_CODE_CLEAR 800
-#define OWM_CONDITION_CODE_PARTLY_CLOUDY_MIN 801
-#define OWM_CONDITION_CODE_PARTLY_CLOUDY_MAX 803
-#define OWM_CONDITION_CODE_OVERCAST_CLOUDS 804
-#define OWM_CONDITION_CODE_TORNADO 900
-#define OWM_CONDITION_CODE_TROPICAL_STORM 901
-#define OWM_CONDITION_CODE_HURRICANE 902
-#define OWM_CONDITION_CODE_COLD 903
-#define OWM_CONDITION_CODE_HOT 904
-#define OWM_CONDITION_CODE_WINDY 905
-#define OWM_CONDITION_CODE_HAIL 906
-
-// Symbols available in the myicons-webfont.ttf
-#define ICON_REFRESH "f"
-#define ICON_TORNADO "A"
-#define ICON_HURRICANE "B"
-#define ICON_THUNDERSTORM "C"
-#define ICON_FREEZING_RAIN "D"
-#define ICON_RAIN "E"
-#define ICON_SNOW "F"
-#define ICON_FOG "G"
-#define ICON_WINDY "H"
-#define ICON_COLD "I"
-#define ICON_CLOUDY "J"
-#define ICON_PARTLY_CLOUDY_DAY "L"
-#define ICON_PARTLY_CLOUDY_NIGHT "K"
-#define ICON_CLEAR_DAY "N"
-#define ICON_CLEAR_NIGHT "M"
-#define ICON_HOT "O"
-#define ICON_UNKNOWN "d"
-#define ICON_NONE ""
-#define ICON_RESTART "h"
-#define ICON_CHARGING "s"
-#define ICON_PLUGGED "t"
-#define ICON_BLUETOOTH_DISCONNECT "b"
- 
 int const MIN_WEATHER_UPDATE_INTERVAL_MS = 10 * 1000;
 int const MAX_WEATHER_UPDATE_INTERVAL_MS = 30 * 60 * 1000;
 
 typedef struct {
   int seconds_hand_mode;
   int seconds_hand_duration;
-  AppTimer *seconds_duration_timer; 
+  AppTimer *seconds_duration_timer;
   time_t most_recent_tap;
-  
+
   int temperature_units;
   bool vibrate_on_bluetooth_disconnect;
   bool bluetooth_connected;
@@ -310,11 +145,11 @@ typedef struct {
   int ticker_currency;
   int weather_source;
   int ticker_font_size;
-  
+
   bool show_timezone;
   bool show_ticker;
   bool show_string;
-  
+
   GFont font_hours;
   GFont font_date;
   GFont font_ticker;
@@ -330,7 +165,7 @@ typedef struct {
   GColor color_foreground_1; // ticks, numbers, date, weather, bluetooth
   GColor color_foreground_2; // hour and minute hands
   GColor color_foreground_3; // second hand
-  
+
   // Hex values for the colors above.
   int bg_color;
   int fg1_color;
@@ -340,7 +175,7 @@ typedef struct {
   bool weather_quiet_time;
   int weather_quiet_time_start;
   int weather_quiet_time_stop;
-  
+
   Layer *background_layer;
 
   TextLayer *date_text_layer;
@@ -361,9 +196,9 @@ typedef struct {
 
   TextLayer *bluetooth_text_layer;
   char bluetooth_text[sizeof("b")];
-  
+
   TextLayer *timezone_text_layer;
-  char timezone_text[sizeof("NAEDT")];  //  Longest one I could find was 5 chars. 
+  char timezone_text[sizeof("NAEDT")];  //  Longest one I could find was 5 chars.
 
   GPath *hour_hand_path;
   GPath *minute_hand_path;
@@ -374,11 +209,11 @@ typedef struct {
   AppTimer *weather_update_timer;
   int weather_update_backoff_interval;
   int expected_weather_message_id;
-    
+
   AppTimer *ticker_update_timer;
   int ticker_update_backoff_interval;
   int expected_ticker_message_id;
-  
+
   AppTimer *string_update_timer;
   int string_update_backoff_interval;
   int expected_string_message_id;
@@ -425,7 +260,7 @@ static void update_background(Layer *layer, GContext *ctx) {
   // Draw background color rectangle to cover hour rays
   graphics_fill_rect(ctx, GRect(10, 10, bounds.size.w - 20, bounds.size.h - 20), 0, GCornerNone);
 #endif
-  
+
   // Draw hours
   graphics_context_set_text_color(ctx, this->color_foreground_1);
   graphics_draw_text(ctx, "12", this->font_hours, GRect((bounds.size.w / 2) - 15, -5, 30, 24), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
@@ -454,7 +289,7 @@ static void update_date(Window *watchface_window) {
 
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
- 
+
   strftime(this->date_text, sizeof(this->date_text), "%a %d", t);
   text_layer_set_text(this->date_text_layer, this->date_text);
   text_layer_set_text_color(this->date_text_layer, this->color_foreground_1);
@@ -462,9 +297,9 @@ static void update_date(Window *watchface_window) {
 
 static void update_timezone(Window *watchface_window, char* tz) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+
   APP_LOG(APP_LOG_LEVEL_DEBUG, "update timezone to %s", tz);
-  
+
   strncpy(this->timezone_text, tz,  sizeof(this->timezone_text));
   text_layer_set_text(this->timezone_text_layer, this->timezone_text);
   text_layer_set_text_color(this->timezone_text_layer, this->color_foreground_1);
@@ -492,7 +327,7 @@ static void condition_code_to_icon_yahoo(Window *watchface_window, int condition
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
   char* icon = NULL;
-  
+
   // Set symbol using icon font
   switch (condition_code) {
     case CONDITION_CODE_REFRESH:
@@ -579,16 +414,16 @@ static void condition_code_to_icon_yahoo(Window *watchface_window, int condition
   strncpy(this->condition_text, icon, sizeof(this->condition_text));
 
 }
- 
+
 
 // OpenWeatherMap condition codes:  http://openweathermap.org/weather-conditions
 
 static void condition_code_to_icon_openweathermap(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+
   char* icon = NULL;
   APP_LOG(APP_LOG_LEVEL_DEBUG, "condition code = %d %d", condition_code, is_daylight);
-  
+
   if (condition_code >= OWM_CONDITION_CODE_THUNDERSTORM_MIN && condition_code <= OWM_CONDITION_CODE_THUNDERSTORM_MAX) // thunderstorms
     icon = ICON_THUNDERSTORM;
   else if (condition_code >= OWM_CONDITION_CODE_RAIN_MIN && condition_code <= OWM_CONDITION_CODE_RAIN_MAX) // rain or drizzle
@@ -603,37 +438,37 @@ static void condition_code_to_icon_openweathermap(Window *watchface_window, int 
   else if (condition_code >= OWM_CONDITION_CODE_PARTLY_CLOUDY_MIN && condition_code <= OWM_CONDITION_CODE_PARTLY_CLOUDY_MAX) // partly cloudy
     icon = (is_daylight ? ICON_PARTLY_CLOUDY_DAY : ICON_PARTLY_CLOUDY_NIGHT);
   else {
- 
+
       switch (condition_code) {
         case CONDITION_CODE_REFRESH:
           icon = ICON_REFRESH;
           break;
-        case OWM_CONDITION_CODE_CLEAR: 
+        case OWM_CONDITION_CODE_CLEAR:
           icon = (is_daylight ? ICON_CLEAR_DAY : ICON_CLEAR_NIGHT);
-          break;      
-        case OWM_CONDITION_CODE_OVERCAST_CLOUDS: 
+          break;
+        case OWM_CONDITION_CODE_OVERCAST_CLOUDS:
           icon = ICON_CLOUDY;
-          break; 
-        case OWM_CONDITION_CODE_TORNADO: 
+          break;
+        case OWM_CONDITION_CODE_TORNADO:
           icon = ICON_TORNADO;
           break;
-        case OWM_CONDITION_CODE_TROPICAL_STORM: 
-        case OWM_CONDITION_CODE_HURRICANE:  
+        case OWM_CONDITION_CODE_TROPICAL_STORM:
+        case OWM_CONDITION_CODE_HURRICANE:
           icon = ICON_HURRICANE;
           break;
-        case OWM_CONDITION_CODE_COLD: 
+        case OWM_CONDITION_CODE_COLD:
           icon = ICON_COLD;
-          break; 
+          break;
         case OWM_CONDITION_CODE_HOT:
           icon = ICON_HOT;
-          break; 
-        case OWM_CONDITION_CODE_WINDY:  
+          break;
+        case OWM_CONDITION_CODE_WINDY:
           icon = ICON_WINDY;
           break;
-        case OWM_CONDITION_CODE_HAIL: 
+        case OWM_CONDITION_CODE_HAIL:
           icon = ICON_FREEZING_RAIN;
           break;
-   
+
         default:
           icon = ICON_UNKNOWN;
           break;
@@ -654,7 +489,7 @@ static void condition_code_to_icon(Window *watchface_window, int condition_code,
 static void mark_as_syncing(Window* watchface_window, bool syncing) {
 #if 0
   update_condition(watchface_window, CONDITION_CODE_REFRESH, false);
-  update_temperature(watchface_window, INT_MIN);  
+  update_temperature(watchface_window, INT_MIN);
 #else
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
@@ -664,7 +499,7 @@ static void mark_as_syncing(Window* watchface_window, bool syncing) {
 
 static void update_condition(Window *watchface_window, int condition_code, bool is_daylight) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+
   mark_as_syncing(watchface_window, false);
   condition_code_to_icon(watchface_window, condition_code, is_daylight);
   text_layer_set_text(this->condition_text_layer, this->condition_text);
@@ -703,19 +538,19 @@ static void log_reason(char* info, AppMessageResult reason) {
     }
     if (reason & APP_MSG_ALREADY_RELEASED) {
       strcat(reason_string, "Already Released.");
-    } 
+    }
     if (reason & APP_MSG_OUT_OF_MEMORY) {
       strcat(reason_string, "Out of Memory.");
     }
     if (reason & APP_MSG_INTERNAL_ERROR) {
       strcat(reason_string, "Internal Error.");
-    } 
+    }
   }
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %x %s", info, reason, reason_string); 
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "%s %x %s", info, reason, reason_string);
 }
 
 static void cancel_ticker_update_timer(WatchfaceWindow* this) {
-  
+
    // In case there is already a timer, turn it off
   if (this->ticker_update_timer) {
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "getting ready to close weather_timer");
@@ -726,7 +561,7 @@ static void cancel_ticker_update_timer(WatchfaceWindow* this) {
 }
 
 static void cancel_string_update_timer(WatchfaceWindow* this) {
-  
+
    // In case there is already a timer, turn it off
   if (this->string_update_timer) {
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "getting ready to close weather_timer");
@@ -737,7 +572,7 @@ static void cancel_string_update_timer(WatchfaceWindow* this) {
 }
 
 static void cancel_weather_update_timer(WatchfaceWindow* this) {
-  
+
    // In case there is already a timer, turn it off
   if (this->weather_update_timer) {
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "getting ready to close weather_timer");
@@ -753,10 +588,10 @@ static void restart_watchface(void* watchface_window) {
   time_t now = time(NULL);
 
   strncpy(this->bluetooth_text, ICON_RESTART, sizeof(this->bluetooth_text));
-  
+
   // normally it will restart on it's own, but occasionally, that doesn't seem to happen.  Set timer
   // to wake up after X seconds in that case.
-  wakeup_schedule(now + 5, 0, false); 
+  wakeup_schedule(now + 5, 0, false);
   APP_LOG(APP_LOG_LEVEL_ERROR, "restarting watchface to recover from Pebble communications bug");
   window_stack_pop_all(false);
 }
@@ -765,7 +600,7 @@ static void restart_watchface(void* watchface_window) {
 static void send_weather_request(void *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   int result = 0;
-    
+
   if (!this->bluetooth_connected)
     return; // short circuit and stop looking for weather if bluetooth is currently disconnected
 
@@ -779,8 +614,8 @@ static void send_weather_request(void *watchface_window) {
 
   DictionaryIterator *iterator;
   if ((result = app_message_outbox_begin(&iterator)) != APP_MSG_OK) {
-    log_reason("unable to begin outbox", result); 
-    //  There is a bug documented in  https://forums.pebble.com/t/how-to-recover-from-app-msg-busy-after-bluetooth-reconnects/22948 
+    log_reason("unable to begin outbox", result);
+    //  There is a bug documented in  https://forums.pebble.com/t/how-to-recover-from-app-msg-busy-after-bluetooth-reconnects/22948
     //    where we get a BUSY that we never recover from after bluetooth reconnect.   So, let's reboot the app to recover.
     if (result == APP_MSG_BUSY) restart_watchface(watchface_window);
   }  else {
@@ -803,9 +638,9 @@ static void send_weather_request(void *watchface_window) {
       dict_write_int32(iterator, KEY_MESSAGE_ID2, ++this->expected_string_message_id);
       dict_write_cstring(iterator, MESSAGE_KEY_STRING_URL, this->string_url);
     }
-    if ((result = app_message_outbox_send()) != APP_MSG_OK) 
+    if ((result = app_message_outbox_send()) != APP_MSG_OK)
       log_reason("unable to send outbox", result);
-  }    
+  }
   //mark_as_syncing(watchface_window, true);
 
 }
@@ -815,7 +650,7 @@ static void update_battery_state(Layer *layer, GContext *ctx) {
 
   BatteryChargeState battery_state = battery_state_service_peek();
   char* icon = NULL;
-  
+
   if (battery_state.is_charging) { // Set symbol using icon font
     icon = ICON_CHARGING;
   } else if (battery_state.is_plugged) {
@@ -840,21 +675,21 @@ static void update_battery_state(Layer *layer, GContext *ctx) {
 
 static void do_async_weather_update(Window* watchface_window) {
    WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+
    cancel_weather_update_timer(this);
    this->weather_update_backoff_interval = MIN_WEATHER_UPDATE_INTERVAL_MS;
-   send_weather_request(watchface_window);  
+   send_weather_request(watchface_window);
 }
 
 static void update_bluetooth(Window *watchface_window, bool bluetooth_connected) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
 
   strncpy(this->bluetooth_text, (bluetooth_connected ? ICON_NONE : ICON_BLUETOOTH_DISCONNECT), sizeof(this->bluetooth_text));
- 
+
   this->bluetooth_connected = bluetooth_connected;
-  
+
   text_layer_set_text(this->bluetooth_text_layer, this->bluetooth_text);
-  
+
   if (bluetooth_connected)  {// if we just got reconnected, then update the weather
     do_async_weather_update(watchface_window);
   }
@@ -951,11 +786,11 @@ static void update_hands(Layer *layer, GContext *ctx) {
 
 static void update_seconds(Layer *layer, GContext *ctx) {
   WatchfaceWindow *this = window_get_user_data(layer_get_window(layer));
-  
+
 #ifdef PBL_COLOR
   graphics_context_set_antialiased(ctx, true);
 #endif
-  
+
   if (SHOW_SECONDS_HAND(this->seconds_hand_mode)) {
     GRect bounds = layer_get_bounds(layer);
     GPoint center = grect_center_point(&bounds);
@@ -976,7 +811,7 @@ static void update_seconds(Layer *layer, GContext *ctx) {
 
 
 static bool inQuietTime(WatchfaceWindow *this, int hour) {
-  
+
   bool quiet = true;
   if (!this->weather_quiet_time)
     quiet = false;
@@ -986,8 +821,8 @@ static bool inQuietTime(WatchfaceWindow *this, int hour) {
     quiet = (hour >= this->weather_quiet_time_start) && (hour < this->weather_quiet_time_stop);
   else  // this would be like start at 11pm and stop at 6am
     quiet = (hour >= this->weather_quiet_time_start) || (hour < this->weather_quiet_time_stop);
-  // APP_LOG(APP_LOG_LEVEL_DEBUG, "checking for inQuietTime (%d %d %d) ==  %d", this->weather_quiet_time, this->weather_quiet_time_start, this->weather_quiet_time_stop, quiet);     
-  return quiet;  
+  // APP_LOG(APP_LOG_LEVEL_DEBUG, "checking for inQuietTime (%d %d %d) ==  %d", this->weather_quiet_time, this->weather_quiet_time_start, this->weather_quiet_time_stop, quiet);
+  return quiet;
 }
 
 static void update_time(Window *watchface_window, struct tm *local_time) {
@@ -999,7 +834,7 @@ static void update_time(Window *watchface_window, struct tm *local_time) {
 
   if (this->show_timezone && (strcmp(local_time->tm_zone, this->timezone_text) != 0)) {
     update_timezone(watchface_window, local_time->tm_zone);
-  } 
+  }
 
   if (local_time->tm_sec == 0) { // Top of minute
     layer_mark_dirty(this->hands_layer);
@@ -1066,35 +901,35 @@ GFont get_weather_font(WatchfaceWindow *this) {
   switch (this->temperature_font_size) {
     case 1: // small font;
       if (this->font_temperature_small == NULL)
-         this->font_temperature_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
+         this->font_temperature_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
       return this->font_temperature_small;
     break;
     default: // no font picked.  Default to medium font, but log an error first
-      APP_LOG(APP_LOG_LEVEL_ERROR, "trying to set weather font, but value out of range %d", this->temperature_font_size);      
+      APP_LOG(APP_LOG_LEVEL_ERROR, "trying to set weather font, but value out of range %d", this->temperature_font_size);
     case 2: // medium font  (which is the same font used for date)
        return this->font_date;
     break;
   }
 }
 
-  
+
 GFont get_ticker_font(WatchfaceWindow *this) {
   switch (this->ticker_font_size) {
     case 1: // small font;
       if (this->font_ticker_small == NULL)
-         this->font_ticker_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12)); 
+         this->font_ticker_small =  fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_EPITET_REGULAR_12));
       return this->font_ticker_small;
     break;
     default: // no font picked.  Default to medium font, but log an error first
-      APP_LOG(APP_LOG_LEVEL_ERROR, "trying to set ticker font, but value out of range %d", this->ticker_font_size);      
+      APP_LOG(APP_LOG_LEVEL_ERROR, "trying to set ticker font, but value out of range %d", this->ticker_font_size);
     case 2: // medium font  (which is the same font used for date)
        return this->font_date;
     break;
   }
 }
 
-  
-  
+
+
 static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_font, GColor layer_color) {
   TextLayer *new_text_layer = text_layer_create(layer_bounds);
   text_layer_set_font(new_text_layer, layer_font);
@@ -1109,7 +944,7 @@ static TextLayer *watchface_text_layer_create(GRect layer_bounds, GFont layer_fo
 
 static void turn_off_seconds_after_timer(void* watch_window) {
   WatchfaceWindow* this = (WatchfaceWindow*)watch_window;
-  
+
   this->seconds_duration_timer = NULL;
   if (this->seconds_hand_mode == SECONDS_HAND_FOR_FIXED_DURATION_ON) {
     this->seconds_hand_mode = SECONDS_HAND_FOR_FIXED_DURATION_OFF;
@@ -1124,9 +959,9 @@ static void turn_off_seconds_after_timer(void* watch_window) {
 static void register_seconds_duration_timer(Window* watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
   int duration = this->seconds_hand_duration * 60000;
-  
+
   if (this->seconds_duration_timer)  { // if it already exists, reschedule it.
-      app_timer_reschedule(this->seconds_duration_timer, duration);  
+      app_timer_reschedule(this->seconds_duration_timer, duration);
    } else {
       this->seconds_duration_timer = app_timer_register(duration, turn_off_seconds_after_timer, this);
   }
@@ -1134,7 +969,7 @@ static void register_seconds_duration_timer(Window* watchface_window) {
 
 
 static void force_immediate_time_update(Window* watchface_window, bool bUpdateTime, bool bUpdateTickTimerService, bool bUpdateDurationTimer) {
-   
+
   if (bUpdateTime) {
     update_time(watchface_window, local_time_peek());
   }
@@ -1152,11 +987,11 @@ static void tap_received(AccelAxisType axis, int32_t direction) {
   WatchfaceWindow *this = window_get_user_data(g_watchface_window);
   time_t now = time(NULL);
   bool double_tap = false;
-  
+
   bool bUpdateTime = false;
   bool bUpdateTickTimerService = false;
   bool bUpdateDurationTimer = false;
-  
+
   double_tap = (now - this->most_recent_tap < 2);
   this->most_recent_tap = now;
   //APP_LOG(APP_LOG_LEVEL_DEBUG, "tap %d %lx", axis, direction);
@@ -1164,7 +999,7 @@ static void tap_received(AccelAxisType axis, int32_t direction) {
   if (double_tap) {
     //APP_LOG(APP_LOG_LEVEL_DEBUG, "ignored tap");
   } else {
-  
+
     switch (this->seconds_hand_mode) {
       case SECONDS_HAND_FOR_FIXED_DURATION_OFF:  // not already showing... start showing for fixed duration
         this->seconds_hand_mode = SECONDS_HAND_FOR_FIXED_DURATION_ON;
@@ -1217,7 +1052,7 @@ static void watchface_window_load(Window *watchface_window) {
   this->font_battery = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_12));
   this->font_bluetooth = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ICONS_36));
 
-  this->color_background = GColorFromHEX(this->bg_color); 
+  this->color_background = GColorFromHEX(this->bg_color);
   this->color_foreground_1 = GColorFromHEX(this->fg1_color);
   this->color_foreground_2 = GColorFromHEX(this->fg2_color);
   this->color_foreground_3 = GColorFromHEX(this->fg3_color);
@@ -1228,7 +1063,7 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->date_text_layer = watchface_text_layer_create(GRect(midX - 30, midY*2- 50, 60, 20), this->font_date, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->date_text_layer));
-    
+
   this->ticker_text_layer = watchface_text_layer_create(GRect(midX +12, midY - 21, 50, 30), this->font_ticker, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->ticker_text_layer));
 
@@ -1246,25 +1081,25 @@ static void watchface_window_load(Window *watchface_window) {
 
   this->bluetooth_text_layer = watchface_text_layer_create(GRect(midX + 10, midY - 22, 50, 50), this->font_bluetooth, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->bluetooth_text_layer));
-  
+
   this->timezone_text_layer = watchface_text_layer_create(GRect(midX - 30, 47, 60, 20), this->font_date, this->color_foreground_1);
   layer_add_child(root_layer, text_layer_get_layer(this->timezone_text_layer));
-  
+
   this->bluetooth_connected = false;
 
   this->hands_layer = layer_create(bounds);
   layer_set_update_proc(this->hands_layer, update_hands);
   layer_add_child(root_layer, this->hands_layer);
-  
+
   this->second_hand_layer = layer_create(bounds);
   layer_set_update_proc(this->second_hand_layer, update_seconds);
   layer_add_child(root_layer, this->second_hand_layer);
-  
+
   if (TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
     tap_service_subscribe(this);
   }
 }
-  
+
 
 
 static void watchface_window_appear(Window *watchface_window) {
@@ -1281,7 +1116,7 @@ static void watchface_window_appear(Window *watchface_window) {
 
 static void watchface_window_disappear(Window *watchface_window) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+
   connection_service_unsubscribe();
   battery_state_service_unsubscribe();
   tick_timer_service_unsubscribe();
@@ -1297,7 +1132,7 @@ static void watchface_window_unload(Window *watchface_window) {
     app_timer_cancel(this->seconds_duration_timer);
     this->seconds_duration_timer = NULL;
   }
-  
+
   cancel_weather_update_timer(this);
   cancel_ticker_update_timer(this);
   cancel_string_update_timer(this);
@@ -1328,10 +1163,10 @@ static void watchface_window_unload(Window *watchface_window) {
 
   text_layer_destroy(this->ticker_text_layer);
   this->ticker_text_layer = NULL;
-    
+
   text_layer_destroy(this->date_text_layer);
   this->date_text_layer = NULL;
-  
+
   text_layer_destroy(this->timezone_text_layer);
   this->timezone_text_layer = NULL;
 
@@ -1346,7 +1181,7 @@ static void watchface_window_unload(Window *watchface_window) {
     this->font_temperature_small = NULL;
   }
   this->font_temperature = NULL;
-  
+
   fonts_unload_custom_font(this->font_battery);
   this->font_battery = NULL;
 
@@ -1358,7 +1193,7 @@ static void watchface_window_unload(Window *watchface_window) {
 
   fonts_unload_custom_font(this->font_ticker);
   this->font_ticker = NULL;
-    
+
   fonts_unload_custom_font(this->font_hours);
   this->font_hours = NULL;
 }
@@ -1399,15 +1234,15 @@ static void string_received(void *watchface_window, Message const *message) {
   }
 }
 
-  
+
 static void settings_received(void *watchface_window, Message const *message) {
   WatchfaceWindow *this = window_get_user_data(watchface_window);
-  
+
   bool bUpdateTime = false;
   bool bUpdateTickTimer = true;
   bool bUpdateTapSensor = true;
   bool bUpdateWeather = false;
-  
+
   if (this->seconds_hand_duration != message->seconds_hand_duration) {
     this->seconds_hand_duration = message->seconds_hand_duration;
     persist_write_int(MESSAGE_KEY_SECONDS_HAND_DURATION, this->seconds_hand_duration);
@@ -1430,7 +1265,7 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_int(MESSAGE_KEY_TEMPERATURE_UNITS, this->temperature_units);
     bUpdateWeather = true;
   }
-  
+
   if (this->ticker_coin != message->coin) {
       this->ticker_coin = message->coin;
       persist_write_int(MESSAGE_KEY_COIN, this->ticker_coin);
@@ -1442,7 +1277,7 @@ static void settings_received(void *watchface_window, Message const *message) {
       persist_write_int(MESSAGE_KEY_CURRENCY, this->ticker_currency);
       bUpdateWeather = true;
   }
-    
+
   if (this->vibrate_on_bluetooth_disconnect != message->vibrate_on_bluetooth_disconnect) {
     this->vibrate_on_bluetooth_disconnect = message->vibrate_on_bluetooth_disconnect;
     persist_write_bool(MESSAGE_KEY_VIBRATE_ON_BLUETOOTH_DISCONNECT, this->vibrate_on_bluetooth_disconnect);
@@ -1460,26 +1295,26 @@ static void settings_received(void *watchface_window, Message const *message) {
     update_ticker(watchface_window, "");
     bUpdateWeather = true;
   }
-  
+
   if (this->show_string != message->show_string) {
     this->show_string = message->show_string;
     persist_write_bool(MESSAGE_KEY_STRING_ON, this->show_string);
     update_timezone(watchface_window, "");
     bUpdateWeather = true;
   }
-  
+
  if (this->openwm_api != message->openwm_api) {
     this->openwm_api = message->openwm_api;
     persist_write_string(MESSAGE_KEY_OPENWM_API, this->openwm_api);
     bUpdateWeather = true;
   }
-  
+
  if (this->string_url != message->string_url) {
     this->string_url = message->string_url;
     persist_write_string(MESSAGE_KEY_STRING_URL, this->string_url);
     bUpdateWeather = true;
-  }  
-  
+  }
+
   if (this->show_battery_at_percent != message->show_battery_at_percent) {
     this->show_battery_at_percent = message->show_battery_at_percent;
     persist_write_int(MESSAGE_KEY_SHOW_BATTERY_AT_PERCENT, this->show_battery_at_percent);
@@ -1491,21 +1326,21 @@ static void settings_received(void *watchface_window, Message const *message) {
     persist_write_int(MESSAGE_KEY_HAND_STYLE, this->hand_style);
     bUpdateTime = true;
   }
-  
+
   if (this->temperature_font_size != message->temperature_font_size) {
     this->temperature_font_size = message->temperature_font_size;
     persist_write_int(MESSAGE_KEY_TEMPERATURE_SIZE, this->temperature_font_size);
     this->font_temperature = get_weather_font(this);
     text_layer_set_font(this->temperature_text_layer, this->font_temperature);
   }
-  
+
   if (this->bg_color != message->bg_color) {
     this->bg_color = message->bg_color;
     persist_write_int(MESSAGE_KEY_BG_COLOR, this->bg_color);
     this->color_background = GColorFromHEX(message->bg_color);
     layer_mark_dirty(this->background_layer);
   }
-  
+
   if (this->fg1_color != message->fg1_color) {
     this->fg1_color = message->fg1_color;
     persist_write_int(MESSAGE_KEY_FG1_COLOR, this->fg1_color);
@@ -1514,19 +1349,19 @@ static void settings_received(void *watchface_window, Message const *message) {
     bUpdateWeather = true;
     update_date(watchface_window);
   }
-    
+
   if (this->fg2_color != message->fg2_color) {
     this->fg2_color = message->fg2_color;
     persist_write_int(MESSAGE_KEY_FG2_COLOR, this->fg2_color);
     this->color_foreground_2 = GColorFromHEX(message->fg2_color);
   }
-  
+
   if (this->fg3_color != message->fg3_color) {
     this->fg3_color = message->fg3_color;
     persist_write_int(MESSAGE_KEY_FG3_COLOR, this->fg3_color);
     this->color_foreground_3 = GColorFromHEX(message->fg3_color);
   }
-  
+
   if (this->weather_quiet_time != message->weather_quiet_time) {
     this->weather_quiet_time = message->weather_quiet_time;
     persist_write_bool(MESSAGE_KEY_WEATHER_QUIET_TIME, this->weather_quiet_time);
@@ -1541,22 +1376,22 @@ static void settings_received(void *watchface_window, Message const *message) {
     this->weather_quiet_time_stop = message->weather_quiet_time_stop;
     persist_write_int(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP, this->weather_quiet_time_stop);
   }
-  
+
   if (this->weather_source != message->weather_source) {
     this->weather_source = message->weather_source;
     persist_write_int(MESSAGE_KEY_WEATHER_SOURCE, this->weather_source);
     bUpdateWeather = true;
   }
-  
-  if (bUpdateWeather) 
+
+  if (bUpdateWeather)
     do_async_weather_update(watchface_window);
-  
+
   force_immediate_time_update(watchface_window, bUpdateTime, bUpdateTickTimer, false);
-  
+
   if (bUpdateTapSensor && TAP_SENSOR_NEEDED(this->seconds_hand_mode)) {
     tap_service_subscribe(this);
   }
- 
+
 }
 
 static void set_clay_message(Message *message)
@@ -1564,10 +1399,10 @@ static void set_clay_message(Message *message)
 //  However, so far, I have not found a unique way to flag CLAY based settings, so anytime we get a Clay based setting,
 //  we flag this message as having come from Clay.
 {
-  message->message_type = MESSAGE_TYPE_SETTINGS;  
+  message->message_type = MESSAGE_TYPE_SETTINGS;
 }
 
-  
+
 static void outbox_sent(DictionaryIterator *iterator, void *context) {
   //APP_LOG(APP_LOG_LEVEL_DEBUG, "outbox sent");
 }
@@ -1673,23 +1508,23 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
       case MESSAGE_KEY_BG_COLOR:
         message.bg_color = tuple->value->uint32;
         set_clay_message(&message);
-        break;    
+        break;
       case MESSAGE_KEY_FG1_COLOR:
         message.fg1_color = tuple->value->uint32;
         set_clay_message(&message);
-        break;    
+        break;
       case MESSAGE_KEY_FG2_COLOR:
         message.fg2_color = tuple->value->uint32;
         set_clay_message(&message);
-        break;    
+        break;
       case MESSAGE_KEY_FG3_COLOR:
         message.fg3_color = tuple->value->uint32;
         set_clay_message(&message);
-        break;    
+        break;
       case MESSAGE_KEY_WEATHER_QUIET_TIME:
         message.weather_quiet_time = tuple->value->int32;
         set_clay_message(&message);
-        break;   
+        break;
       case MESSAGE_KEY_WEATHER_QUIET_TIME_START:
         message.weather_quiet_time_start = tuple->value->int32;
         set_clay_message(&message);
@@ -1751,7 +1586,7 @@ Window *watchface_window_create() {
     .fg1_color = persist_read_int_or_default(MESSAGE_KEY_FG1_COLOR, 0xAAAA55),  // Brass
     .fg2_color = persist_read_int_or_default(MESSAGE_KEY_FG2_COLOR, 0xFFFF55),  //  Iterine
     .fg3_color = persist_read_int_or_default(MESSAGE_KEY_FG3_COLOR, 0xFF0000),   // Red
-   
+
     .weather_quiet_time = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME,0),
     .weather_quiet_time_start = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME_START, 23),
     .weather_quiet_time_stop = persist_read_int_or_default(MESSAGE_KEY_WEATHER_QUIET_TIME_STOP,6),
@@ -1773,7 +1608,7 @@ Window *watchface_window_create() {
 
     .temperature_text_layer = NULL,
     .temperature_text = "",
-      
+
     .ticker_text_layer = NULL,
     .ticker_text = "",
 
@@ -1786,7 +1621,7 @@ Window *watchface_window_create() {
 
     .bluetooth_text_layer = NULL,
     .bluetooth_text = "",
-    
+
     .show_timezone = persist_read_bool_or_default(MESSAGE_KEY_SHOW_TIMEZONE, false),
     .timezone_text_layer = NULL,
     .timezone_text = "",
@@ -1797,7 +1632,7 @@ Window *watchface_window_create() {
     .weather_update_timer = NULL,
     .weather_update_backoff_interval = -1,
     .expected_weather_message_id = 0,
-    
+
     .show_ticker = persist_read_bool_or_default(MESSAGE_KEY_TICKER_ON, true),
     .ticker_update_timer = NULL,
     .ticker_update_backoff_interval = -1,
@@ -1809,7 +1644,7 @@ Window *watchface_window_create() {
     .openwm_api = persist_read_string_or_default(MESSAGE_KEY_OPENWM_API,"31196cb8a000e808be9f27de97a6f2e1"),
     .string_url = persist_read_string_or_default1(MESSAGE_KEY_STRING_URL,""),
   };
-  
+
   window_set_user_data(watchface_window, this);
 
   window_set_window_handlers(watchface_window, (WindowHandlers) {
@@ -1818,7 +1653,7 @@ Window *watchface_window_create() {
     .disappear = watchface_window_disappear,
     .unload = watchface_window_unload
   });
-  
+
   app_message_set_context(watchface_window);
   app_message_register_inbox_received(inbox_received);
   app_message_register_outbox_sent(outbox_sent);
