@@ -5,7 +5,8 @@ Pebble Watch Face
  - BTC/ETH/XRP/LTC/ECC/BCH
  - USD/AUD/CAN/NZD/EUR/PND
 
-![Alt text](screenshots/analog-btc.png?raw=true "Watch")
+![Alt text](screenshots/basalt.gif?raw=true "Watch")
+![Alt text](screenshots/chalk.gif?raw=true "Watch")
 
 ![Alt text](screenshots/config.png?raw=true "Config")
 

@@ -10,7 +10,7 @@ var clay = new Clay(clayConfig);
 // Message types.
 var MESSAGE_TYPE_READY = 0;
 var MESSAGE_TYPE_WEATHER = 1;
-var MESSAGE_TYPE_SETTINGS = 2;
+//var MESSAGE_TYPE_SETTINGS = 2;
 var MESSAGE_TYPE_TICKER = 3;
 var MESSAGE_TYPE_STRING = 4;
 // Temperature units.
@@ -28,7 +28,7 @@ var TICKER_CURRENCY_NZD = 4;
 var TICKER_CURRENCY_EUR = 5;
 var TICKER_CURRENCY_PND = 6;
 
-var WEATHER_SOURCE_OPENWEATHERMAP = 1;
+//var WEATHER_SOURCE_OPENWEATHERMAP = 1;
 var WEATHER_SOURCE_YAHOO = 2;
 
 function sendXhr(url, http_method, callback) {
@@ -42,7 +42,7 @@ function sendXhr(url, http_method, callback) {
 
 function parseTemperature(temperature, actualTemperatureUnits, requestedTemperatureUnits) {
   temperature = parseInt(temperature, 10);
-  
+
   if (actualTemperatureUnits == "K") {
     temperature = temperature - 273.15;  // convert from Kelvin to Celcius
     switch (requestedTemperatureUnits) {
@@ -169,12 +169,15 @@ function getRepString (rep) {
 
 function queryCoin(messageId, coin, currency) {
   var currencyS = parseCurrency(currency);
-  
+
   var url = 'https://api.coinmarketcap.com/v1/ticker/'+parseCoin(coin)+'/?convert='+currencyS.toUpperCase()+'&limit=1';
     console.log ("requesting " + url);
     sendXhr(url, 'GET', function(responseText) {
       var responseJson = JSON.parse(responseText);
-      var price = responseJson[0]['price_'+currencyS.toLowerCase()];
+      var price = 0;
+      if (typeof responseJson[0] != "undefined") {
+        price = responseJson[0]['price_'+currencyS.toLowerCase()];
+      }
       price = getRepString(price);
       console.log("Ticker:  "+ price);
 
@@ -183,7 +186,7 @@ function queryCoin(messageId, coin, currency) {
           'KEY_MESSAGE_ID1' : messageId,
           'KEY_TICKER': price
       });
-      
+
   });
 }
 
@@ -207,12 +210,15 @@ function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, posi
     var query = encodeURIComponent('select astronomy, item.condition, units.temperature from weather.forecast where woeid in (select place.woeid from flickr.places where api_key="a4cd191f6a5f639df681211751f8c74e" AND lat="' + position.coords.latitude + '" AND lon="' + position.coords.longitude + '")');
     url = 'https://query.yahooapis.com/v1/public/yql?q=' + query + '&format=json';
     console.log ("requesting "+url);
-  
+
     sendXhr(url, 'GET', function(responseText) {
       var responseJson = JSON.parse(responseText);
-      var channel = responseJson.query.results.channel;
+      var channel = null;
+      if (typeof responseJson.query.results != "undefined") {
+        channel = responseJson.query.results.channel;
+      }
       var now = Date.now();
-  
+
       Pebble.sendAppMessage({
         'KEY_MESSAGE_TYPE': MESSAGE_TYPE_WEATHER,
         'KEY_MESSAGE_ID': messageId,
@@ -224,32 +230,41 @@ function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, posi
   } else {  // default to using OpenWeatherMap
     if (myAPIKey == '') {
       myAPIKey = '31196cb8a000e808be9f27de97a6f2e1';
-    } 
+    }
      // Construct URL
     url = 'http://api.openweathermap.org/data/2.5/weather?lat=' +
         position.coords.latitude + '&lon=' + position.coords.longitude + '&appid=' + myAPIKey;
     console.log ("requesting " + url);
     // Send request to OpenWeatherMap
-    sendXhr(url, 'GET', 
+    sendXhr(url, 'GET',
       function(responseText) {
         // responseText contains a JSON object with weather info
         var json = JSON.parse(responseText);
+        var sunrise = null;
+        var sunset = null;
+        var condition = null;
+        var temp = null;
         var nowseconds = Date.now() / 1000;  // now returns in ms, but OpenWeatherMap returns sunrise and sunset in seconds.
-        var sunrise = parseInt(json.sys.sunrise);
-        var sunset = parseInt(json.sys.sunset);
-        
+        if (typeof json.sys != "undefined") {
+          sunrise = parseInt(json.sys.sunrise);
+          sunset = parseInt(json.sys.sunset);
+        }
+        if (typeof json.weather[0] != "undefined") {
+          condition = json.weather[0].id;
+        }
+        if (typeof json.main != "undefined") {
+          temp = json.main.temp;
+        }
         Pebble.sendAppMessage({
           'KEY_MESSAGE_TYPE': MESSAGE_TYPE_WEATHER,
           'KEY_MESSAGE_ID': messageId,
-          'KEY_CONDITION_CODE': parseInt(json.weather[0].id, 10),
-          'KEY_TEMPERATURE': parseTemperature(json.main.temp, "K", temperatureUnits),
+          'KEY_CONDITION_CODE': parseInt(condition, 10),
+          'KEY_TEMPERATURE': parseTemperature(temp, "K", temperatureUnits),
           'KEY_IS_DAYLIGHT': +(sunrise <= nowseconds && nowseconds <= sunset)
-         
         });
-  
-      }      
+      }
     );
-      
+
   }
 }
 
@@ -290,7 +305,7 @@ Pebble.addEventListener('appmessage', function(event) {
         console.log("PebbleKit JS sending String request with message id of " + event.payload['KEY_MESSAGE_ID2'] + " and url " + event.payload['KEY_STRING_URL']);
         queryString(event.payload['KEY_MESSAGE_ID2'],event.payload['KEY_STRING_URL']);
       }
-      break; 
+      break;
     default:
       console.log("PebbleKit JS received message of unknown type: " + messageType);
       break;
