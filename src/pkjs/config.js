@@ -24,6 +24,10 @@ module.exports = [
           {
             "label": "Hollow Rectangles",
             "value": "2"
+          },
+          {
+            "label": "Alpha",
+            "value": "3"
           }
         ]
       },

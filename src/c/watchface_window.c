@@ -719,10 +719,19 @@ static void update_hands(Layer *layer, GContext *ctx) {
   gpath_destroy(this->hour_hand_path);
   gpath_destroy(this->minute_hand_path);
 
-  if (this->hand_style == 1) // Traditional
+  if (this->hand_style % 2 == 1) // Traditional or Alpha
   {
-    GPathInfo hour_hand_points = { 7, (GPoint []){ {2,0}, {2,-10}, {7, -15}, {0, -50}, {-7, -15}, {-2,-10}, {-2,0} } };
-    GPathInfo minute_hand_points = { 7, (GPoint []) { {2,0}, {2,-12}, {6, -20}, {0, -75}, {-6, -20}, {-2,-12},{-2,0} } };
+    GPathInfo hour_hand_points;
+    GPathInfo minute_hand_points;
+    if (this->hand_style ==1) //Traditional
+    {
+      hour_hand_points = (GPathInfo) { 3, (GPoint []){ {7, 0}, {0, -50}, {-7, 0} } };
+      minute_hand_points = (GPathInfo){ 3, (GPoint []) { {7, 0}, {0, -75}, {-7, 0} } };
+    } else //alpha
+    {
+      hour_hand_points = (GPathInfo){ 7, (GPoint []){ {2,0}, {2,-10}, {7, -15}, {0, -50}, {-7, -15}, {-2,-10}, {-2,0} } };
+      minute_hand_points = (GPathInfo){ 7, (GPoint []) { {2,0}, {2,-12}, {6, -20}, {0, -75}, {-6, -20}, {-2,-12},{-2,0} } };
+    }
 
     // create new hands
     this->hour_hand_path = gpath_create(&hour_hand_points);
