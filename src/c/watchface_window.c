@@ -74,6 +74,7 @@
  *
 
  */
+#include <pebble.h>
 #include "watchface_window.h"
 #include "pebble_patch.h"
 #include <limits.h>
