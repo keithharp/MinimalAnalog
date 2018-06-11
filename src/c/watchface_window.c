@@ -5,6 +5,11 @@
  *   the problem I am seeing after bluetooth disconnect where the weather does not get updated is a pebble firmware bug.
  *   workaround is to go into an app and come back to the watchface.
  *
+ * Version 1.8 adds
+ *   - Alpha watch hand style
+ *   - Improve CHALK
+ *   - Added makefile and YouCompleteMe script 
+ *
  * Version 1.7 adds
  *   - Ability to set your own OpenWeatherMap API Key
  *   - Ability to pull your a string from the web, can be used like https://github.com/Zwater/zackwatch-public

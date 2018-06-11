@@ -31,4 +31,7 @@ size:
 logs:
 	pebble logs --emulator $(P)
 
-.PHONY: all build config log install clean size logs
+screenshot:
+	pebble screenshot --phone ${PEBBLE_PHONE}
+
+.PHONY: all build config log install clean size logs screenshot
