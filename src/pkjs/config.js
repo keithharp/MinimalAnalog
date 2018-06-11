@@ -3,7 +3,7 @@ module.exports = [
     "type": "heading",
     "defaultValue": "Minimal Analog Configuration"
   },
- 
+
    {
     "type": "section",
     "items": [
@@ -17,13 +17,17 @@ module.exports = [
         "label": "Watch Hand Style",
         "defaultValue" : "1",
         "options": [
-          { 
-            "label": "Solid Pointers", 
+          {
+            "label": "Solid Pointers",
             "value": "1"
           },
-          { 
-            "label": "Hollow Rectangles", 
+          {
+            "label": "Hollow Rectangles",
             "value": "2"
+          },
+          {
+            "label": "Alpha",
+            "value": "3"
           }
         ]
       },
@@ -74,12 +78,12 @@ module.exports = [
            "label": "Temperature Units",
            "defaultValue" : "1",
            "options": [
-             { 
-               "label": "Fahrenheit", 
+             {
+               "label": "Fahrenheit",
                "value": "1"
              },
-             { 
-               "label": "Celcius", 
+             {
+               "label": "Celcius",
                "value": "0"
              }
            ]
@@ -90,12 +94,12 @@ module.exports = [
            "label": "Temperature Font Size",
            "defaultValue" : "2",
            "options": [
-             { 
-               "label": "Small", 
+             {
+               "label": "Small",
                "value": "1"
              },
-             { 
-               "label": "Medium", 
+             {
+               "label": "Medium",
                "value": "2"
              }
            ]
@@ -106,16 +110,22 @@ module.exports = [
            "label": "Weather Source",
            "defaultValue" : "1",
            "options": [
-             { 
-               "label": "OpenWeatherMap", 
+             {
+               "label": "OpenWeatherMap",
                "value": "1"
              },
-             { 
-               "label": "Yahoo", 
+             {
+               "label": "Yahoo",
                "value": "2"
              }
            ]
-         },   
+         },
+         {
+          "type": "input",
+          "messageKey": "KEY_OPENWM_API",
+          "label": "OpenWeatherMap API KEY",
+           "defaultValue" : "31196cb8a000e808be9f27de97a6f2e1"
+         }
        ]
       },
     {
@@ -125,15 +135,15 @@ module.exports = [
           "type": "heading",
           "defaultValue": "More Settings"
         },
-  
-   
-  
+
+
+
         {
           "type": "toggle",
           "messageKey": "VIBRATE_ON_BLUETOOTH_DISCONNECT",
           "label": "Alert for Bluetooth Disconnect",
           "defaultValue": true
-        }, 
+        },
         {
           "type": "slider",
           "messageKey": "SHOW_BATTERY_AT_PERCENT",
@@ -146,7 +156,7 @@ module.exports = [
           "label": "Show Current TimeZone",
           "defaultValue": false
         }
-  
+
       ]
     },
   {
@@ -214,6 +224,103 @@ module.exports = [
         "max": 23
       }
     ]
+      },
+    { "type": "section",
+       "items": [
+         {
+           "type": "heading",
+           "defaultValue" : "String Settings"
+         },
+         {
+          "type": "toggle",
+          "messageKey": "KEY_STRING_ON",
+          "label": "Fetch String",
+          "defaultValue": false
+         },
+         {
+          "type": "input",
+          "messageKey": "KEY_STRING_URL",
+          "label": "URL to fetch"
+         }
+         ]
+    },
+    { "type": "section",
+       "items": [
+         {
+           "type": "heading",
+           "defaultValue" : "Ticker Settings"
+         },
+         {
+          "type": "toggle",
+          "messageKey": "KEY_TICKER_ON",
+          "label": "Show Ticker",
+          "defaultValue": true
+         },
+         {
+           "type": "select",
+           "messageKey": "COIN",
+           "label": "Coin",
+           "defaultValue" : "1",
+           "options": [
+             {
+               "label": "bitcoin",
+               "value": "1"
+             },
+             {
+               "label": "ethereum",
+               "value": "2"
+             },
+             {
+               "label": "ripple",
+               "value": "3"
+             },
+             {
+               "label": "lightcoin",
+               "value": "4"
+             },
+             {
+               "label": "bitcoin-cash",
+               "value": "5"
+             },
+             {
+               "label": "ethereum-classic",
+               "value": "6"
+             }
+           ]
+         },
+         {
+           "type": "select",
+           "messageKey": "CURRENCY",
+           "label": "Currency",
+           "defaultValue" : "1",
+           "options": [
+             {
+               "label": "usd",
+               "value": "1"
+             },
+             {
+               "label": "aud",
+               "value": "2"
+             },
+             {
+               "label": "can",
+               "value": "3"
+             },
+             {
+               "label": "nzd",
+               "value": "4"
+             },
+             {
+               "label": "eur",
+               "value": "5"
+             },
+             {
+               "label": "pnd",
+               "value": "6"
+             },
+           ]
+         },
+       ]
       },
   {
     "type": "submit",
