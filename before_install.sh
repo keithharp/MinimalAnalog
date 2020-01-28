@@ -10,7 +10,7 @@ cd ~
 
 mkdir -p ~/pebble-dev
 mkdir -p ~/.pebble-sdk
-touch ~/.pebble-sdk/DISABLE_ANALYTICS
+touch ~/.pebble-sdk/NO_TRACKING
 
 # Get the Pebble SDK and toolchain
 if [ ! -d $HOME/pebble-dev/${PEBBLE_SDK} ]; then
