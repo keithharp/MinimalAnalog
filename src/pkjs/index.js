@@ -32,12 +32,12 @@ var TICKER_CURRENCY_PND = 6;
 var WEATHER_SOURCE_YAHOO = 2;
 
 function sendXhr(url, http_method, callback) {
-  var xhr = new XMLHttpRequest();
+  let xhr = new XMLHttpRequest();
+  xhr.open(http_method, url);
+  xhr.send();
   xhr.onload = function () {
     callback(this.responseText);
   };
-  xhr.open(http_method, url);
-  xhr.send();
 }
 
 function parseTemperature(temperature, actualTemperatureUnits, requestedTemperatureUnits) {
@@ -124,27 +124,27 @@ function parseCurrency(currency) {
 }
 
 function parseCoin(coin) {
-    var coinS = "bitcoin";
+    var coinS = "BTC";
   switch (coin) {
       case TICKER_COIN_ETHEREUM:
-          coinS = "ethereum";
+          coinS = "ETH";
           break;
       case TICKER_COIN_RIPPLE:
-          coinS = "ripple";
+          coinS = "XRP";
           break;
       case TICKER_COIN_LIGHTCOIN:
-          coinS = "litecoin";
+          coinS = "LTC";
           break;
       case TICKER_COIN_BCASH:
-          coinS = "bitcoin-cash";
+          coinS = "BCH";
           break;
       case TICKER_COIN_ECC:
-          coinS = "ethereum-classic";
+          coinS = "ETC";
           break;
       default:
-          coinS = "bitcoin";
+          coinS = "BTC";
   }
-  return coinS.toLowerCase();
+  return coinS;
 }
 
 function readFromLocalStorage(key, defaultValue) {
@@ -157,8 +157,11 @@ function writeToLocalStorage(key, value) {
 }
 
 function getRepString (rep) {
+  if (rep < 2) {
+    return rep.toFixed(2);
+  }
   if (rep < 1000) {
-    return rep; // return the same number
+    return rep.toFixed(0); // return the same number
   }
   if (rep < 10000) { // place a comma between
     return rep.charAt(0) + ',' + rep.substring(1);
@@ -167,17 +170,24 @@ function getRepString (rep) {
   return (rep/1000).toFixed(rep % 1000 != 0)+'K';
 }
 
-function queryCoin(messageId, coin, currency) {
+function queryCoin(messageId, coin, currency, api) {
+  console.log('CMC api: '+api);
   var currencyS = parseCurrency(currency);
-
-  var url = 'https://api.coinmarketcap.com/v1/ticker/'+parseCoin(coin)+'/?convert='+currencyS.toUpperCase()+'&limit=1';
-    console.log ("requesting " + url);
-    sendXhr(url, 'GET', function(responseText) {
-      var responseJson = JSON.parse(responseText);
+  const options = {
+    method: 'GET',
+    headers: {
+       'X-CMC_PRO_API_KEY': api
+    }
+  }
+  var url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol='+parseCoin(coin)+'&convert='+currencyS.toUpperCase();
+  console.log ("requesting " + url);
+  fetch(url, options)
+	.then(res=> res.text())
+	.then(res => {
+      console.log(res);
+      var responseJson = JSON.parse(res);
       var price = 0;
-      if (typeof responseJson[0] != "undefined") {
-        price = responseJson[0]['price_'+currencyS.toLowerCase()];
-      }
+      price = responseJson["data"][parseCoin(coin)]["quote"][currencyS.toUpperCase()]["price"];
       price = getRepString(price);
       console.log("Ticker:  "+ price);
 
@@ -186,8 +196,7 @@ function queryCoin(messageId, coin, currency) {
           'KEY_MESSAGE_ID1' : messageId,
           'KEY_TICKER': price
       });
-
-  });
+	});
 }
 
 function queryString(messageId, url) {
@@ -204,14 +213,14 @@ function queryString(messageId, url) {
 
 function queryWeather(messageId, temperatureUnits, weatherSource, myAPIKey, position) {
 
-  var url;
-  if (weatherSource == WEATHER_SOURCE_YAHOO)
-  {
-    var query = encodeURIComponent('select astronomy, item.condition, units.temperature from weather.forecast where woeid in (select place.woeid from flickr.places where api_key="a4cd191f6a5f639df681211751f8c74e" AND lat="' + position.coords.latitude + '" AND lon="' + position.coords.longitude + '")');
-    url = 'https://query.yahooapis.com/v1/public/yql?q=' + query + '&format=json';
-    console.log ("requesting "+url);
+	var url;
+	if (weatherSource == WEATHER_SOURCE_YAHOO)
+	{
+		var query = encodeURIComponent('select astronomy, item.condition, units.temperature from weather.forecast where woeid in (select place.woeid from flickr.places where api_key="a4cd191f6a5f639df681211751f8c74e" AND lat="' + position.coords.latitude + '" AND lon="' + position.coords.longitude + '")');
+		url = 'https://query.yahooapis.com/v1/public/yql?q=' + query + '&format=json';
+		console.log ("requesting "+url);
 
-    sendXhr(url, 'GET', function(responseText) {
+		sendXhr(url, 'GET', function(responseText) {
       var responseJson = JSON.parse(responseText);
       var channel = null;
       if (typeof responseJson.query.results != "undefined") {
@@ -299,7 +308,7 @@ Pebble.addEventListener('appmessage', function(event) {
       sendWeatherRequest(event.payload['KEY_MESSAGE_ID'], event.payload['TEMPERATURE_UNITS'], event.payload['WEATHER_SOURCE'], event.payload['KEY_OPENWM_API']);
       if (event.payload['KEY_TICKER_ON']) {
         console.log("PebbleKit JS sending ticker request with message id of " + event.payload['KEY_MESSAGE_ID1'] + " and coin " + event.payload['COIN'] + "and currency " + event.payload['CURRENCY']);
-        queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY']);
+        queryCoin(event.payload['KEY_MESSAGE_ID1'], event.payload['COIN'], event.payload['CURRENCY'], event.payload['KEY_TICKER_API']);
       }
       if (event.payload['KEY_STRING_ON']) {
         console.log("PebbleKit JS sending String request with message id of " + event.payload['KEY_MESSAGE_ID2'] + " and url " + event.payload['KEY_STRING_URL']);

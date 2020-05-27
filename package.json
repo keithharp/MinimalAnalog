@@ -34,6 +34,7 @@
             "KEY_TICKER": 21,
             "KEY_TICKER_ON": 26,
             "KEY_TICKER_SIZE": 22,
+            "KEY_TICKER_API": 32,
             "SECONDS_HAND_DURATION": 18,
             "SHOW_BATTERY_AT_PERCENT": 8,
             "SHOW_SECONDS_HAND": 5,
@@ -112,5 +113,5 @@
             "watchface": true
         }
     },
-    "version": "1.8.0"
+    "version": "1.9.0"
 }

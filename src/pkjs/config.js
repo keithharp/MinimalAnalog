@@ -250,6 +250,11 @@ module.exports = [
            "type": "heading",
            "defaultValue" : "Ticker Settings"
          },
+	 {
+          "type": "input",
+          "messageKey": "KEY_TICKER_API",
+          "label": "CoinMarketCap API Key"
+         },
          {
           "type": "toggle",
           "messageKey": "KEY_TICKER_ON",

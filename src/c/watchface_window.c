@@ -128,6 +128,7 @@ typedef struct {
       bool show_string;
       char *string_url;
       char *openwm_api;
+      char *ticker_api;
     };
   };
 } Message;
@@ -225,6 +226,7 @@ typedef struct {
   int expected_string_message_id;
   char* string_url;
   char* openwm_api;
+  char* ticker_api;
 } WatchfaceWindow;
 
 static Window *g_watchface_window = NULL;
@@ -646,6 +648,7 @@ static void send_weather_request(void *watchface_window) {
       dict_write_int32(iterator, KEY_MESSAGE_ID1, ++this->expected_ticker_message_id);
       dict_write_int32(iterator, MESSAGE_KEY_COIN, this->ticker_coin);
       dict_write_int32(iterator, MESSAGE_KEY_CURRENCY, this->ticker_currency);
+      dict_write_cstring(iterator, MESSAGE_KEY_TICKER_API, this->ticker_api);
     }
     if (this->show_string) {
       dict_write_int32(iterator, KEY_MESSAGE_ID2, ++this->expected_string_message_id);
@@ -1331,6 +1334,12 @@ static void settings_received(void *watchface_window, Message const *message) {
     bUpdateWeather = true;
   }
 
+ if (this->ticker_api != message->ticker_api) {
+    this->ticker_api = message->ticker_api;
+    persist_write_string(MESSAGE_KEY_TICKER_API, this->ticker_api);
+    bUpdateWeather = true;
+  }
+
  if (this->string_url != message->string_url) {
     this->string_url = message->string_url;
     persist_write_string(MESSAGE_KEY_STRING_URL, this->string_url);
@@ -1559,6 +1568,10 @@ static void inbox_received(DictionaryIterator *iterator, void *watchface_window)
         message.weather_source = atoi(tuple->value->cstring);
         set_clay_message(&message);
         break;
+      case MESSAGE_KEY_TICKER_API:
+        message.ticker_api = tuple->value->cstring;
+        set_clay_message(&message);
+        break;
       default:
         APP_LOG(APP_LOG_LEVEL_ERROR, "Application received unknown key: %lu", tuple->key);
         break;
@@ -1665,6 +1678,7 @@ Window *watchface_window_create() {
     .string_update_backoff_interval = -1,
     .openwm_api = persist_read_string_or_default(MESSAGE_KEY_OPENWM_API,"31196cb8a000e808be9f27de97a6f2e1"),
     .string_url = persist_read_string_or_default1(MESSAGE_KEY_STRING_URL,""),
+    .ticker_api = persist_read_string_or_default(MESSAGE_KEY_TICKER_API,""),
   };
 
   window_set_user_data(watchface_window, this);
